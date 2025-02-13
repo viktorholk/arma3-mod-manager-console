@@ -81,7 +81,7 @@ impl ModManager {
                 // Setup the customs mod folder
                 let custom_mods_path = utils::construct_path_string(
                     &Path::new(&utils::get_home_path()?),
-                    "arma3-mod-manager-console-custom-mods/",
+                    "arma3-mod-manager-console-custom-mods",
                 )?;
 
                 if !Path::new(&custom_mods_path).exists() {

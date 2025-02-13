@@ -115,7 +115,7 @@ impl<'a> Terminal<'a> {
 
             str += &format!(" {}", m.name);
 
-            //str.truncate(36);
+            str.truncate(36);
 
             execute!(
                 stdout,
