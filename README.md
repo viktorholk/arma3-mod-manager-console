@@ -42,7 +42,30 @@ cd arma3-mod-manager-console
 cargo run
 ````
 
-### Console Troubleshooting Guide (Fix Errors & Paths)
+### Config
+The application creates a config file at `~/arma3-mod-launcher-console-config.json` which looks like this:
+
+````
+{
+  "game_path": "/Users/user/Library/Application Support/Steam/steamapps/common/Arma 3",
+  "workshop_path": "/Users/user/Library/Application Support/Steam/steamapps/workshop/content/107410",
+  "custom_mods_path": "/Users/user/arma3-mod-manager-console-custom-mods",
+  "enabled_mods": [
+    
+  ],
+  "default_args": "-noSplash -skipIntro -world=empty"
+}
+````
+
+If the application cannot resolve the correct paths, you can edit them here.
+
+#### Custom Mods
+
+Simply move your mods into the custom mods folder. The folder will be alongside the config.
+
+
+
+### Troubleshooting Guide (Fix Errors & Paths)
 
 **Issue**: Running the console gives an error: 
 
