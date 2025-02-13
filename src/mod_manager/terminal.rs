@@ -34,7 +34,6 @@ impl<'a> Terminal<'a> {
 
         execute!(stdout, cursor::SavePosition)?;
         execute!(stdout, terminal::EnterAlternateScreen)?;
-
         execute!(stdout, crossterm::cursor::Hide)?;
 
         terminal::enable_raw_mode()?;
@@ -45,7 +44,6 @@ impl<'a> Terminal<'a> {
 
         execute!(stdout, terminal::LeaveAlternateScreen)?;
         execute!(stdout, cursor::RestorePosition)?;
-
         execute!(stdout, crossterm::cursor::Show)?;
 
         Ok(())
@@ -60,7 +58,7 @@ impl<'a> Terminal<'a> {
             stdout,
             SetForegroundColor(Color::Cyan),
             cursor::MoveTo(0, top_offset),
-            Print("Arma 3 Mod Manager CLI"),
+            Print("Arma 3 Mod Manager Console"),
             SetForegroundColor(Color::Reset)
         )?;
 
@@ -76,7 +74,7 @@ impl<'a> Terminal<'a> {
             stdout,
             cursor::MoveTo(0, top_offset),
             Print(&format!(
-                "Mods: {:<2}/{}{:^25}Page: {:<2}/{}",
+                "Mods: {:<2}/{:<2}{:^25}Page: {:<2}/{:<2}",
                 enabled_mods, total_mods, " ", page_number, total_pages
             )),
         )?;
@@ -117,7 +115,7 @@ impl<'a> Terminal<'a> {
 
             str += &format!(" {}", m.name);
 
-            str.truncate(41);
+            str.truncate(36);
 
             execute!(
                 stdout,
@@ -126,11 +124,21 @@ impl<'a> Terminal<'a> {
                 Print(str),
                 SetForegroundColor(Color::Reset)
             )?;
+
+            if m.is_cdlc {
+                execute!(
+                    stdout,
+                    cursor::MoveTo(41, top_offset),
+                    SetForegroundColor(Color::Blue),
+                    Print("CDLC"),
+                    SetForegroundColor(Color::Reset)
+                )?;
+            }
+
             top_offset += 1;
         }
 
         // Show pagination direction
-
         if (page_number < total_pages) && (page_number > 1) {
             execute!(
                 stdout,
@@ -191,12 +199,6 @@ impl<'a> Terminal<'a> {
                 SetForegroundColor(Color::Reset),
             )?;
         }
-
-        //execute!(
-        //    stdout,
-        //    cursor::MoveTo(info_left_offset, top_offset),
-        //    Print("For more information visit: github.com/viktorholk/arma3-mod-manager-cli"),
-        //)?;
 
         stdout.flush()?;
 
@@ -293,6 +295,7 @@ impl<'a> Terminal<'a> {
         let enabled_mods = self.mod_manager.loaded_mods.filter(|m| m.enabled);
         let game_path = self.mod_manager.config.get_game_path();
         let workshop_path = self.mod_manager.config.get_workshop_path();
+        let custom_mods_path = self.mod_manager.config.get_custom_mods_path();
 
         let game_app_path = game_path.join("arma3.app");
         let game_app_path_str = game_app_path.to_string_lossy().to_string();
@@ -311,17 +314,27 @@ impl<'a> Terminal<'a> {
         if !enabled_mods.is_empty() {
             command.arg("--args");
 
-            let mod_paths = enabled_mods
+            // Exclude CDLCS when creating sym links since they already are in the game folder
+            // only for workshop + custom mods
+            let mod_paths: Vec<_> = enabled_mods
                 .iter()
-                .map(|m| m.get_path(workshop_path))
-                .collect::<Vec<_>>();
+                .filter_map(|m| {
+                    if m.is_cdlc {
+                        None
+                    } else if m.is_custom {
+                        custom_mods_path.map(|cmp| m.get_path(cmp))
+                    } else {
+                        Some(m.get_path(workshop_path))
+                    }
+                })
+                .collect();
 
             super::file_handler::create_sym_links(game_path, mod_paths)?;
 
             // Save the enabled mods so it loads next time
             self.mod_manager
                 .config
-                .update_mods(enabled_mods.iter().map(|m| m.id).collect());
+                .update_mods(enabled_mods.iter().map(|m| m.identifier.clone()).collect());
             self.mod_manager.config.save()?;
 
             // Build args
@@ -329,14 +342,14 @@ impl<'a> Terminal<'a> {
             if default_args.len() > 0 {
                 command.arg(default_args);
             }
-            command.arg(&format!(
-                "-mod={}",
-                enabled_mods
-                    .iter()
-                    .map(|m| m.id.to_string())
-                    .collect::<Vec<String>>()
-                    .join(";")
-            ));
+
+            let mod_list = enabled_mods
+                .iter()
+                .map(|m| m.identifier.as_str())
+                .collect::<Vec<_>>()
+                .join(";");
+
+            command.arg(&format!("-mod={}", mod_list));
         }
 
         command.output()?;
@@ -356,7 +369,6 @@ impl<'a> Terminal<'a> {
         let mut current_pos = args_string.len() as u16;
 
         // Set up the terminal
-
         execute!(stdout, cursor::Show)?;
         execute!(stdout, SetCursorStyle::BlinkingUnderScore)?;
         stdout.flush()?;
@@ -367,15 +379,11 @@ impl<'a> Terminal<'a> {
             stdout,
             SetForegroundColor(Color::Cyan),
             cursor::MoveTo(0, 0),
-            Print("Arma 3 Mod Manager CLI"),
+            Print("Arma 3 Mod Manager Console"),
             SetForegroundColor(Color::Reset),
         )?;
 
-        execute!(
-            stdout,
-            cursor::MoveTo(0, 2),
-            Print("Press <ENTER> to save"),
-        )?;
+        execute!(stdout, cursor::MoveTo(0, 2), Print("Press <ENTER> to save"),)?;
 
         let arg_string_left = 4;
         let arg_string_top = 4;
@@ -450,10 +458,10 @@ impl<'a> Terminal<'a> {
                     )?;
 
                     execute!(
-            stdout,
-            cursor::MoveTo(0, arg_string_top + 2),
-            Print("For more information visit: https://community.bistudio.com/wiki/Arma_3:_Startup_Parameters")
-        )?;
+                        stdout,
+                        cursor::MoveTo(0, arg_string_top + 2),
+                        Print("For more information visit: https://community.bistudio.com/wiki/Arma_3:_Startup_Parameters")
+                    )?;
 
                     // Move cursor to the new position
                     execute!(
@@ -465,7 +473,6 @@ impl<'a> Terminal<'a> {
                 }
             }
         }
-
         // Restore terminal state
         execute!(stdout, cursor::Hide)?;
         execute!(stdout, SetCursorStyle::DefaultUserShape)?;

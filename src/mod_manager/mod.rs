@@ -3,11 +3,11 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use regex::Regex;
-
-use crate::errors::{AppError, AppResult};
+use phf::phf_map;
 
 use self::{config::Config, paginator::Paginator, terminal::Terminal};
+
+use crate::errors::{AppError, AppResult};
 
 mod config;
 mod file_handler;
@@ -15,24 +15,40 @@ mod paginator;
 mod terminal;
 mod utils;
 
+/// Arma 3 Creator DLCs
+/// Unlike base game DLCs - CDLCS needs to be included in the startup arguments
+static ARMA3_CDLCS: phf::Map<&'static str, &'static str> = phf_map! {
+    "GM" => "Global Mobilization",
+    "VN" => "S.O.G. Prairie Fire",
+    "CSLA" => "CSLA Iron Curtain",
+    "WS" => "Western Sahara",
+    "SPE" => "Spearhead 1944",
+    "RF" => "Reaction Forces",
+    "EF" => "Expeditionary Forces",
+};
+
 #[derive(Debug, Clone)]
 pub struct Mod {
-    pub id: u64,
+    pub identifier: String,
     pub name: String,
     pub enabled: bool,
+    pub is_cdlc: bool,
+    pub is_custom: bool,
 }
 
 impl Mod {
-    fn new(id: u64, name: String) -> Mod {
+    fn new(identifier: String, name: String, is_cdlc: bool, is_custom: bool) -> Mod {
         Mod {
-            id,
+            identifier,
             name,
             enabled: false,
+            is_cdlc,
+            is_custom,
         }
     }
 
     pub fn get_path(&self, path: &Path) -> PathBuf {
-        path.join(self.id.to_string())
+        path.join(self.identifier.to_string())
     }
 }
 
@@ -46,16 +62,11 @@ impl ModManager {
     pub fn new(page_size: usize) -> AppResult<Self> {
         match Config::read() {
             Ok(config) => {
-                let mut loaded_mods = ModManager::get_installed_mods(config.get_workshop_path())?;
+                let mut loaded_mods = ModManager::get_installed_mods(&config)?;
 
-                for i_mod in &mut loaded_mods {
-                    if config
-                        .get_enabled_mods()
-                        .iter()
-                        .find(|&&e_mod_id| e_mod_id == i_mod.id)
-                        .is_some()
-                    {
-                        i_mod.enabled = true;
+                for l_mod in &mut loaded_mods {
+                    if config.get_enabled_mods().contains(&l_mod.identifier) {
+                        l_mod.enabled = true;
                     }
                 }
 
@@ -67,10 +78,19 @@ impl ModManager {
 
             Err(AppError::IoError(io_error)) if io_error.kind() == std::io::ErrorKind::NotFound => {
                 let (workshop_path, game_path) = utils::setup_steam_paths()?;
+                // Setup the customs mod folder
+                let custom_mods_path = utils::construct_path_string(
+                    &Path::new(&utils::get_home_path()?),
+                    "arma3-mod-manager-console-custom-mods",
+                )?;
 
-                let config = Config::new(game_path, workshop_path)?;
+                if !Path::new(&custom_mods_path).exists() {
+                    fs::create_dir(&custom_mods_path)?;
+                }
 
-                let loaded_mods = ModManager::get_installed_mods(config.get_workshop_path())?;
+                let config = Config::new(game_path, workshop_path, Some(custom_mods_path))?;
+
+                let loaded_mods = ModManager::get_installed_mods(&config)?;
 
                 Ok(ModManager {
                     config,
@@ -90,70 +110,43 @@ impl ModManager {
     }
 
     pub fn refresh_mods(&mut self) -> AppResult<()> {
-        let installed_mods = ModManager::get_installed_mods(self.config.get_workshop_path())?;
+        let installed_mods = ModManager::get_installed_mods(&self.config)?;
         self.loaded_mods = Paginator::new(installed_mods, self.loaded_mods.page_size);
 
         Ok(())
     }
 
-    fn get_installed_mods(workshop_path: &Path) -> AppResult<Vec<Mod>> {
+    fn get_installed_mods(config: &Config) -> AppResult<Vec<Mod>> {
         let mut mods: Vec<Mod> = Vec::new();
 
-        match fs::read_dir(&workshop_path) {
-            Ok(installed_mods) => {
-                for entry in installed_mods {
-                    let entry = match entry {
-                        Ok(e) => e,
-                        Err(_) => continue,
-                    };
+        // Process workshop mods
+        if let Ok(paths) = utils::yield_path_dirs(config.get_workshop_path()) {
+            mods.extend(
+                paths
+                    .into_iter()
+                    .filter_map(|path_buf| utils::process_mod_dir(path_buf, false)),
+            );
+        }
 
-                    let path = entry.path();
-
-                    if !path.is_dir() {
-                        continue;
-                    }
-
-                    let mod_id: u64 = match path
-                        .file_name()
-                        .and_then(|name| name.to_str())
-                        .and_then(|s| s.parse().ok())
-                    {
-                        Some(id) => id,
-                        None => continue,
-                    };
-
-                    // If the meta.cpp file is not present, skip
-                    let mod_path = Path::new(&path).join("meta.cpp");
-                    if !mod_path.exists() {
-                        continue;
-                    }
-
-                    let mod_content =
-                        fs::read(&mod_path).map_err(|_| AppError::MissingMeta(mod_id))?;
-
-                    let content_str = String::from_utf8_lossy(&mod_content);
-
-                    let mut name = match Regex::new(r#"name\s*=\s*"([^"]+)""#)
-                        .unwrap()
-                        .captures(&content_str)
-                        .and_then(|caps| caps.get(1))
-                        .map(|m| m.as_str().to_string())
-                    {
-                        Some(name) => name,
-                        None => continue,
-                    };
-
-                    // Uppercase the first letter of the name
-                    let mut chars = name.chars();
-                    name = match chars.next() {
-                        None => String::new(),
-                        Some(f) => f.to_uppercase().collect::<String>() + chars.as_str(),
-                    };
-
-                    mods.push(Mod::new(mod_id, name.to_string()));
-                }
+        // Process custom mods folder
+        if let Some(custom_mods_path) = config.get_custom_mods_path() {
+            if let Ok(paths) = utils::yield_path_dirs(custom_mods_path) {
+                mods.extend(
+                    paths
+                        .into_iter()
+                        .filter_map(|path_buf| utils::process_mod_dir(path_buf, true)),
+                );
             }
-            Err(e) => println!("{}\n{:?}", e, workshop_path),
+        }
+
+        // Process CDLCS
+        if let Ok(paths) = utils::yield_path_dirs(config.get_game_path()) {
+            mods.extend(paths.into_iter().filter_map(|path_buf| {
+                let dir_name = path_buf.file_name()?.to_str()?.to_string();
+                ARMA3_CDLCS
+                    .get_entry(&dir_name)
+                    .map(|(key, value)| Mod::new(key.to_string(), value.to_string(), true, false))
+            }));
         }
 
         mods.sort_by(|a, b| a.name.cmp(&b.name));
