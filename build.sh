@@ -2,7 +2,7 @@
 #!/bin/bash
 
 # Project name
-PROJECT_NAME="arma3-mod-manager-cli"
+PROJECT_NAME="arma3-mod-manager-console"
 
 # Define targets
 TARGETS=(

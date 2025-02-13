@@ -20,7 +20,7 @@ This have been tested on Apple Silicon M1.
 ### Download & Install
 #### Download Pre-Built Binary
 
-Downloading the latest Pre-Built UNIX executable from [releases](https://github.com/viktorholk/arma3-mod-manager-cli/releases).
+Downloading the latest Pre-Built UNIX executable from [releases](https://github.com/viktorholk/arma3-mod-manager-console/releases).
 
 <details><summary>For MacOS</summary>
 
@@ -37,19 +37,19 @@ and press Open Anyway
 
 #### Build from Source
 ````
-git clone git@github.com:viktorholk/arma3-mod-manager-cli.git
-cd arma3-mod-manager-cli
+git clone git@github.com:viktorholk/arma3-mod-manager-console.git
+cd arma3-mod-manager-console
 cargo run
 ````
 
 ### Console Troubleshooting Guide (Fix Errors & Paths)
 
-**Issue**: Running the CLI gives an error: 
+**Issue**: Running the console gives an error: 
 
 `Error: InvalidPath("/Users/user/Library/Application Support/Steam/steamapps/workshop/content/107410")`
 
 **Steps to Resolve**:
-1. **Check Config File**: Verify `~/arma3-mod-manager-cli-config.json` has the correct Steam path.
+1. **Check Config File**: Verify `~/arma3-mod-manager-console-config.json` has the correct Steam path.
 2. **Ensure Workshop Mods**: Confirm Arma 3 workshop mods are installed via Steam.
 3. **Locate Steam Path**:
    - For MacOS check for `~/Library/Application Support/Steam`

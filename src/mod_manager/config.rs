@@ -1,19 +1,39 @@
 use std::path::{Path, PathBuf};
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
+use serde_json::Value;
 
 use crate::errors::{AppError, AppResult};
 
 use super::utils;
 
-const SAVE_FILE: &str = "arma3-mod-manager-cli-config.json";
+const SAVE_FILE: &str = "arma3-mod-manager-console-config.json";
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Config {
     game_path: String,
     workshop_path: String,
-    enabled_mods: Vec<u64>,
+    custom_mods_path: Option<String>, // Optional
+    #[serde(deserialize_with = "deserialize_mods")]
+    enabled_mods: Vec<String>,
     default_args: String,
+}
+
+fn deserialize_mods<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let v = Vec::<Value>::deserialize(deserializer)?;
+
+    let mut mods = Vec::new();
+    for item in v {
+        match item {
+            Value::String(s) => mods.push(s),
+            Value::Number(n) => mods.push(n.to_string()),
+            _ => {}
+        }
+    }
+    Ok(mods)
 }
 
 impl Config {
@@ -23,10 +43,15 @@ impl Config {
         Ok(Path::new(&home_path).join(SAVE_FILE))
     }
 
-    pub fn new(game_path: String, workshop_path: String) -> AppResult<Self> {
+    pub fn new(
+        game_path: String,
+        workshop_path: String,
+        custom_mods_path: Option<String>,
+    ) -> AppResult<Self> {
         let new_config = Config {
             game_path,
             workshop_path,
+            custom_mods_path,
             enabled_mods: Vec::new(),
             default_args: "-noSplash -skipIntro -world=empty".to_string(),
         };
@@ -48,11 +73,11 @@ impl Config {
         Ok(())
     }
 
-    pub fn get_enabled_mods(&self) -> Vec<u64> {
+    pub fn get_enabled_mods(&self) -> Vec<String> {
         self.enabled_mods.clone()
     }
 
-    pub fn update_mods(&mut self, mods: Vec<u64>) {
+    pub fn update_mods(&mut self, mods: Vec<String>) {
         self.enabled_mods = mods;
     }
 
@@ -62,6 +87,10 @@ impl Config {
 
     pub fn get_workshop_path(&self) -> &Path {
         Path::new(&self.workshop_path)
+    }
+
+    pub fn get_custom_mods_path(&self) -> Option<&Path> {
+        self.custom_mods_path.as_deref().map(Path::new)
     }
 
     pub fn get_default_args(&self) -> &str {

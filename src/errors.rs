@@ -10,9 +10,6 @@ pub enum AppError {
     #[error("Invalid path: {0}")]
     InvalidPath(String),
 
-    #[error("Mod meta.cpp missing or unreadable for mod ID {0}")]
-    MissingMeta(u64),
-
     #[error("Path conversion error: {0}")]
     PathConversionError(String),
 
@@ -20,8 +17,9 @@ pub enum AppError {
     IoError(#[from] std::io::Error),
 
     #[error("JSON error: {0}")]
-    SerdeError(#[from] serde_json::Error),
+    SerdeJsonError(#[from] serde_json::Error),
 
     #[error("Unsupported platform")]
     UnsupportedPlatform,
 }
+

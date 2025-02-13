@@ -44,9 +44,6 @@ pub fn remove_dir_symlinks(path: &Path) -> AppResult<()> {
     Ok(())
 }
 
-// Creates symlinks to all files in the entries Vec
-//
-// entries being the original path to the files
 pub fn create_sym_links(path: &Path, entries: Vec<PathBuf>) -> AppResult<()> {
     for entry in entries {
         let to_path = path.join(entry.file_name().unwrap());
