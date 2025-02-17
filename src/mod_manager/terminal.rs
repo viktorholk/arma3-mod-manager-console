@@ -58,7 +58,10 @@ impl<'a> Terminal<'a> {
             stdout,
             SetForegroundColor(Color::Cyan),
             cursor::MoveTo(0, top_offset),
-            Print("Arma 3 Mod Manager Console"),
+            Print(format!(
+                "Arma 3 Mod Manager Console ({})",
+                env!("CARGO_PKG_VERSION")
+            )),
             SetForegroundColor(Color::Reset)
         )?;
 

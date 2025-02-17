@@ -1,4 +1,4 @@
-# Arma3 Mod Manager Console (Linux & macOS)
+# Arma3 Mod Manager Console
 
 <p align="center">
   <img src="https://github.com/user-attachments/assets/f5f58180-e5f4-4442-a448-c60f81df907d" alt="animated" />
@@ -6,9 +6,7 @@
 
 ## Overview
 
-Arma 3 Mod Manager Console is a lightweight tool that helps you enable, disable, and manage Arma 3 Steam Workshop mods and DLCs without needing the official Arma 3 Launcher. Designed for Linux and macOS, this console-based mod manager is perfect for players who want a simple and efficient way to control their mod list.
-
-This have been tested on Apple Silicon M1.
+Arma 3 Mod Manager Console is a lightweight tool that helps you enable, disable, and manage Arma 3 Steam Workshop mods and creator DLCs without needing the official Arma 3 Launcher. Designed for Linux and macOS, this console-based mod manager is perfect for players who want a simple and efficient way to control their mod list.
 
 ## Installation
 
@@ -42,7 +40,7 @@ cd arma3-mod-manager-console
 cargo run
 ````
 
-### Config
+## Config
 The application creates a config file at `~/arma3-mod-launcher-console-config.json` which looks like this:
 
 ````
@@ -59,13 +57,11 @@ The application creates a config file at `~/arma3-mod-launcher-console-config.js
 
 If the application cannot resolve the correct paths, you can edit them here.
 
-#### Custom Mods
+### Custom Mods
 
 Simply move your mods into the custom mods folder. The folder will be alongside the config.
 
-
-
-### Troubleshooting Guide (Fix Errors & Paths)
+## Troubleshooting Guide (Fix Errors & Paths)
 
 **Issue**: Running the console gives an error: 
 
@@ -79,7 +75,6 @@ Simply move your mods into the custom mods folder. The folder will be alongside 
    - For Linux check for  `~/.local/share/Steam`
 
 **Adjust and test** the paths, then rerun the application.
-
 
 ## Issues
 Need Help? [GitHub's issues tab](https://github.com/viktorholk/script-interactor/issues).
