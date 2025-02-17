@@ -20,6 +20,16 @@ Arma 3 Mod Manager Console is a lightweight tool that helps you enable, disable,
 
 Downloading the latest Pre-Built UNIX executable from [releases](https://github.com/viktorholk/arma3-mod-manager-console/releases).
 
+- **For newer Macs (Apple Silicon / M1 and later)**:
+  - `arma3-mod-manager-console-aarch64-apple-darwin-release.zip`
+- **For older Intel-based Macs**:
+  - `arma3-mod-manager-console-x86_64-apple-darwin-release.zip`
+- **For Linux (64-bit)**:
+  - `arma3-mod-manager-console-x86_64-unknown-linux-gnu-release.zip`.
+- **For Linux (ARM-based)**:
+  - `arma3-mod-manager-console-aarch64-unknown-linux-gnu-release.zip`.
+
+
 <details><summary>For MacOS</summary>
 
 On MacOS, you may be greeted with a security warning.
