@@ -89,6 +89,7 @@ impl ModManager {
                 }
 
                 let config = Config::new(game_path, workshop_path, Some(custom_mods_path))?;
+                config.save()?;
 
                 let loaded_mods = ModManager::get_installed_mods(&config)?;
 

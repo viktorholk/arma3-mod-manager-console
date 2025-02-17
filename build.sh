@@ -6,8 +6,10 @@ PROJECT_NAME="arma3-mod-manager-console"
 
 # Define targets
 TARGETS=(
-    "x86_64-apple-darwin"
     "aarch64-apple-darwin"
+    "aarch64-unknown-linux-gnu"
+    "x86_64-apple-darwin"
+    "x86_64-unknown-linux-gnu"
 )
 
 # Function to build for a specific target
@@ -16,7 +18,11 @@ build_for_target() {
 
     echo "Building for target ${target} in release mode..."
 
-    cargo build --target "${target}" --release
+    if [[ "$target" == *"-linux-gnu" ]]; then
+        cross build --target "${target}" --release
+    else
+        cargo build --target "${target}" --release
+    fi
 
     # Path to the binary
     local binary_path="target/${target}/release/${PROJECT_NAME}"

@@ -19,6 +19,8 @@ pub struct Config {
     default_args: String,
 }
 
+// Backwards compatibility supports
+// Since previous configs the enabled mods array was only numbers.
 fn deserialize_mods<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
 where
     D: Deserializer<'de>,
@@ -55,8 +57,6 @@ impl Config {
             enabled_mods: Vec::new(),
             default_args: "-noSplash -skipIntro -world=empty".to_string(),
         };
-
-        new_config.valid()?;
 
         Ok(new_config)
     }
