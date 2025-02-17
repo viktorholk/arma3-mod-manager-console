@@ -94,7 +94,7 @@ Not 100% of Arma 3 mods are compatible with Mac or Linux.
 Mods that require .DLL files will not work so no ACE, TFR/ACRE or blastcore.
 
 ## Issues
-Need Help? [GitHub's issues tab](https://github.com/viktorholk/script-interactor/issues).
+Need Help? [Github's issues tab](https://github.com/viktorholk/arma3-mod-manager-console/issues).
 
 ## License
 Arma 3 Mod Manager Console is under the [MIT LICENSE](LICENSE).
