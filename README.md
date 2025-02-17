@@ -71,7 +71,9 @@ If the application cannot resolve the correct paths, you can edit them here.
 
 Simply move your mods into the custom mods folder. The folder will be alongside the config.
 
-## Troubleshooting Guide (Fix Errors & Paths)
+## Troubleshooting Guide
+
+### Fix Paths
 
 **Issue**: Running the console gives an error: 
 
@@ -85,6 +87,11 @@ Simply move your mods into the custom mods folder. The folder will be alongside 
    - For Linux check for  `~/.local/share/Steam`
 
 **Adjust and test** the paths, then rerun the application.
+
+### Mods Compatability
+Not 100% of Arma 3 mods are compatible with Mac or Linux.
+
+Mods that require .DLL files will not work so no ACE, TFR/ACRE or blastcore.
 
 ## Issues
 Need Help? [GitHub's issues tab](https://github.com/viktorholk/script-interactor/issues).
