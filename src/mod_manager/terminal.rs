@@ -279,7 +279,7 @@ impl<'a> Terminal<'a> {
                             self.start_game()?;
                         }
 
-                        KeyCode::Esc => break,
+                        KeyCode::Esc | KeyCode::Char('q') => break,
 
                         _ => continue,
                     },
