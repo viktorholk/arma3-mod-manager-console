@@ -58,6 +58,7 @@ The application creates a config file at `~/arma3-mod-launcher-console-config.js
   "game_path": "/Users/user/Library/Application Support/Steam/steamapps/common/Arma 3",
   "workshop_path": "/Users/user/Library/Application Support/Steam/steamapps/workshop/content/107410",
   "custom_mods_path": "/Users/user/arma3-mod-manager-console-custom-mods",
+  "executable_name": "arma3",
   "enabled_mods": [
     
   ],
@@ -65,7 +66,7 @@ The application creates a config file at `~/arma3-mod-launcher-console-config.js
 }
 ````
 
-If the application cannot resolve the correct paths, you can edit them here.
+If the application cannot resolve the correct paths, you can edit them here. The `executable_name` field allows you to specify a different Arma 3 executable name (without the `.app` extension) if needed.
 
 ### Custom Mods
 

@@ -183,6 +183,7 @@ impl<'a> Terminal<'a> {
             ("Toggle All Mods", "<CTRL> + <SPACE>"),
             ("Refresh Mods", "R"),
             ("Set Custom Parameters", "F"),
+            ("Set Executable Name", "E"),
             ("Launch Game", "P"),
         ];
 
@@ -275,6 +276,9 @@ impl<'a> Terminal<'a> {
                         KeyCode::Char('f') => {
                             self.set_custom_parameters_screen(stdout)?;
                         }
+                        KeyCode::Char('e') => {
+                            self.set_executable_name_screen(stdout)?;
+                        }
                         KeyCode::Char('p') => {
                             self.start_game()?;
                         }
@@ -300,7 +304,8 @@ impl<'a> Terminal<'a> {
         let workshop_path = self.mod_manager.config.get_workshop_path();
         let custom_mods_path = self.mod_manager.config.get_custom_mods_path();
 
-        let game_app_path = game_path.join("arma3.app");
+        let executable_name = self.mod_manager.config.get_executable_name();
+        let game_app_path = game_path.join(format!("{}.app", executable_name));
         let game_app_path_str = game_app_path.to_string_lossy().to_string();
 
         if !game_app_path.exists() {
@@ -470,6 +475,121 @@ impl<'a> Terminal<'a> {
                     execute!(
                         stdout,
                         cursor::MoveTo(current_pos + arg_string_left, arg_string_top)
+                    )?;
+
+                    stdout.flush()?;
+                }
+            }
+        }
+        // Restore terminal state
+        execute!(stdout, cursor::Hide)?;
+        execute!(stdout, SetCursorStyle::DefaultUserShape)?;
+
+        Ok(())
+    }
+
+    fn set_executable_name_screen(&mut self, stdout: &mut Stdout) -> AppResult<()> {
+        let mut executable_name = self.mod_manager.config.get_executable_name().to_string();
+        let mut current_pos = executable_name.len() as u16;
+
+        // Set up the terminal
+        execute!(stdout, cursor::Show)?;
+        execute!(stdout, SetCursorStyle::BlinkingUnderScore)?;
+        stdout.flush()?;
+
+        self.clear_screen(stdout)?;
+
+        execute!(
+            stdout,
+            SetForegroundColor(Color::Cyan),
+            cursor::MoveTo(0, 0),
+            Print("Arma 3 Mod Manager Console - Executable Name"),
+            SetForegroundColor(Color::Reset),
+        )?;
+
+        execute!(stdout, cursor::MoveTo(0, 2), Print("Press <ENTER> to save, <ESC> to cancel"),)?;
+
+        let name_left = 4;
+        let name_top = 4;
+        let name_left_padding = name_left - 3;
+
+        execute!(
+            stdout,
+            SetForegroundColor(Color::Red),
+            cursor::MoveTo(name_left_padding, name_top),
+            Print(">"),
+            SetForegroundColor(Color::Reset)
+        )?;
+
+        execute!(
+            stdout,
+            cursor::MoveTo(name_left, name_top),
+            Print(&executable_name)
+        )?;
+
+        execute!(
+            stdout,
+            cursor::MoveTo(0, name_top + 2),
+            Print("Enter the name of the Arma 3 executable (without .app extension)")
+        )?;
+
+        execute!(
+            stdout,
+            cursor::MoveTo(current_pos + name_left, name_top)
+        )?;
+
+        loop {
+            if event::poll(Duration::from_millis(500))? {
+                if let Event::Key(KeyEvent { code, .. }) = event::read()? {
+                    match code {
+                        KeyCode::Esc => {
+                            break;
+                        }
+                        KeyCode::Enter => {
+                            self.mod_manager.config.set_executable_name(executable_name);
+                            self.mod_manager.config.save()?;
+                            break;
+                        }
+                        KeyCode::Backspace => {
+                            if !executable_name.is_empty() && current_pos > 0 {
+                                executable_name.pop();
+                                current_pos -= 1;
+                            }
+                        }
+                        KeyCode::Char(c) => {
+                            executable_name.push(c);
+                            current_pos += 1;
+                        }
+                        _ => {}
+                    }
+
+                    execute!(stdout, terminal::Clear(terminal::ClearType::CurrentLine))?;
+
+                    execute!(
+                        stdout,
+                        SetForegroundColor(Color::Red),
+                        cursor::MoveTo(name_left_padding, name_top),
+                        Print(">"),
+                        SetForegroundColor(Color::Reset)
+                    )?;
+
+                    // Clear the previous line and update display
+                    execute!(
+                        stdout,
+                        cursor::MoveTo(name_left, name_top),
+                        Print(&executable_name)
+                    )?;
+
+                    execute!(
+                        stdout,
+                        cursor::MoveTo(0, name_top + 2),
+                        Print("Enter the name of the Arma 3 executable (without .app extension)")
+                    )?;
+
+                    // Move cursor to the new position
+                    execute!(
+                        stdout,
+                        cursor::MoveTo(current_pos + name_left, name_top)
                     )?;
 
                     stdout.flush()?;
