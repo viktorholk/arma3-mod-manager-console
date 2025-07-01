@@ -306,22 +306,20 @@ impl<'a> Terminal<'a> {
 
         let executable_name = self.mod_manager.config.get_executable_name();
         let game_app_path = game_path.join(format!("{}.app", executable_name));
-        let game_app_path_str = game_app_path.to_string_lossy().to_string();
+        let executable_path = game_app_path.join("Contents/MacOS").join(executable_name);
+        let executable_path_str = executable_path.to_string_lossy().to_string();
 
-        if !game_app_path.exists() {
-            return Err(AppError::InvalidPath(game_app_path_str.to_owned()));
+        if !executable_path.exists() {
+            return Err(AppError::InvalidPath(executable_path_str.to_owned()));
         }
 
-        let mut command = Command::new("open");
-
-        command.args(["-a", &game_app_path_str]);
+        let mut command = Command::new(&executable_path_str);
+        command.current_dir(game_path);
 
         // Remove existing symlinks from the game directory
         super::file_handler::remove_dir_symlinks(game_path)?;
 
         if !enabled_mods.is_empty() {
-            command.arg("--args");
-
             // Exclude CDLCS when creating sym links since they already are in the game folder
             // only for workshop + custom mods
             let mod_paths: Vec<_> = enabled_mods
