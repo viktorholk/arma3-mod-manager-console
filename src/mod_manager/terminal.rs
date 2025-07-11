@@ -1,5 +1,6 @@
 use std::{
     io::{self, Stdout, Write},
+    path::PathBuf,
     process::Command,
     time::Duration,
 };
@@ -27,6 +28,24 @@ impl<'a> Terminal<'a> {
             mod_manager,
             selected_index: 0,
         }
+    }
+
+    /// Get the executable path based on the current platform
+    #[cfg(target_os = "macos")]
+    fn get_executable_path(game_path: &std::path::Path, executable_name: &str) -> PathBuf {
+        let game_app_path = game_path.join(format!("{}.app", executable_name));
+        game_app_path.join("Contents/MacOS").join(executable_name)
+    }
+
+    #[cfg(target_os = "linux")]
+    fn get_executable_path(game_path: &std::path::Path, executable_name: &str) -> PathBuf {
+        game_path.join(executable_name)
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    fn get_executable_path(game_path: &std::path::Path, executable_name: &str) -> PathBuf {
+        // Fallback for other platforms - assume direct executable
+        game_path.join(executable_name)
     }
 
     pub fn run(&mut self) -> AppResult<()> {
@@ -305,8 +324,7 @@ impl<'a> Terminal<'a> {
         let custom_mods_path = self.mod_manager.config.get_custom_mods_path();
 
         let executable_name = self.mod_manager.config.get_executable_name();
-        let game_app_path = game_path.join(format!("{}.app", executable_name));
-        let executable_path = game_app_path.join("Contents/MacOS").join(executable_name);
+        let executable_path = Self::get_executable_path(&game_path, &executable_name);
         let executable_path_str = executable_path.to_string_lossy().to_string();
 
         if !executable_path.exists() {
@@ -525,10 +543,16 @@ impl<'a> Terminal<'a> {
             Print(&executable_name)
         )?;
 
+        let instruction_text = if cfg!(target_os = "macos") {
+            "Enter the name of the Arma 3 executable (without .app extension)"
+        } else {
+            "Enter the name of the Arma 3 executable"
+        };
+
         execute!(
             stdout,
             cursor::MoveTo(0, name_top + 2),
-            Print("Enter the name of the Arma 3 executable (without .app extension)")
+            Print(instruction_text)
         )?;
 
         execute!(
@@ -581,7 +605,7 @@ impl<'a> Terminal<'a> {
                     execute!(
                         stdout,
                         cursor::MoveTo(0, name_top + 2),
-                        Print("Enter the name of the Arma 3 executable (without .app extension)")
+                        Print(instruction_text)
                     )?;
 
                     // Move cursor to the new position
