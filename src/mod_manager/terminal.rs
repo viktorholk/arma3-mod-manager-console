@@ -1,5 +1,6 @@
 use std::{
     io::{self, Stdout, Write},
+    path::PathBuf,
     process::Command,
     time::Duration,
 };
@@ -27,6 +28,24 @@ impl<'a> Terminal<'a> {
             mod_manager,
             selected_index: 0,
         }
+    }
+
+    /// Get the executable path based on the current platform
+    #[cfg(target_os = "macos")]
+    fn get_executable_path(game_path: &std::path::Path, executable_name: &str) -> PathBuf {
+        let game_app_path = game_path.join(format!("{}.app", executable_name));
+        game_app_path.join("Contents/MacOS").join(executable_name)
+    }
+
+    #[cfg(target_os = "linux")]
+    fn get_executable_path(game_path: &std::path::Path, executable_name: &str) -> PathBuf {
+        game_path.join(executable_name)
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    fn get_executable_path(game_path: &std::path::Path, executable_name: &str) -> PathBuf {
+        // Fallback for other platforms - assume direct executable
+        game_path.join(executable_name)
     }
 
     pub fn run(&mut self) -> AppResult<()> {
@@ -183,6 +202,7 @@ impl<'a> Terminal<'a> {
             ("Toggle All Mods", "<CTRL> + <SPACE>"),
             ("Refresh Mods", "R"),
             ("Set Custom Parameters", "F"),
+            ("Set Executable Name", "E"),
             ("Launch Game", "P"),
         ];
 
@@ -275,6 +295,9 @@ impl<'a> Terminal<'a> {
                         KeyCode::Char('f') => {
                             self.set_custom_parameters_screen(stdout)?;
                         }
+                        KeyCode::Char('e') => {
+                            self.set_executable_name_screen(stdout)?;
+                        }
                         KeyCode::Char('p') => {
                             self.start_game()?;
                         }
@@ -300,23 +323,21 @@ impl<'a> Terminal<'a> {
         let workshop_path = self.mod_manager.config.get_workshop_path();
         let custom_mods_path = self.mod_manager.config.get_custom_mods_path();
 
-        let game_app_path = game_path.join("arma3.app");
-        let game_app_path_str = game_app_path.to_string_lossy().to_string();
+        let executable_name = self.mod_manager.config.get_executable_name();
+        let executable_path = Self::get_executable_path(&game_path, &executable_name);
+        let executable_path_str = executable_path.to_string_lossy().to_string();
 
-        if !game_app_path.exists() {
-            return Err(AppError::InvalidPath(game_app_path_str.to_owned()));
+        if !executable_path.exists() {
+            return Err(AppError::InvalidPath(executable_path_str.to_owned()));
         }
 
-        let mut command = Command::new("open");
-
-        command.args(["-a", &game_app_path_str]);
+        let mut command = Command::new(&executable_path_str);
+        command.current_dir(game_path);
 
         // Remove existing symlinks from the game directory
         super::file_handler::remove_dir_symlinks(game_path)?;
 
         if !enabled_mods.is_empty() {
-            command.arg("--args");
-
             // Exclude CDLCS when creating sym links since they already are in the game folder
             // only for workshop + custom mods
             let mod_paths: Vec<_> = enabled_mods
@@ -470,6 +491,127 @@ impl<'a> Terminal<'a> {
                     execute!(
                         stdout,
                         cursor::MoveTo(current_pos + arg_string_left, arg_string_top)
+                    )?;
+
+                    stdout.flush()?;
+                }
+            }
+        }
+        // Restore terminal state
+        execute!(stdout, cursor::Hide)?;
+        execute!(stdout, SetCursorStyle::DefaultUserShape)?;
+
+        Ok(())
+    }
+
+    fn set_executable_name_screen(&mut self, stdout: &mut Stdout) -> AppResult<()> {
+        let mut executable_name = self.mod_manager.config.get_executable_name().to_string();
+        let mut current_pos = executable_name.len() as u16;
+
+        // Set up the terminal
+        execute!(stdout, cursor::Show)?;
+        execute!(stdout, SetCursorStyle::BlinkingUnderScore)?;
+        stdout.flush()?;
+
+        self.clear_screen(stdout)?;
+
+        execute!(
+            stdout,
+            SetForegroundColor(Color::Cyan),
+            cursor::MoveTo(0, 0),
+            Print("Arma 3 Mod Manager Console - Executable Name"),
+            SetForegroundColor(Color::Reset),
+        )?;
+
+        execute!(stdout, cursor::MoveTo(0, 2), Print("Press <ENTER> to save, <ESC> to cancel"),)?;
+
+        let name_left = 4;
+        let name_top = 4;
+        let name_left_padding = name_left - 3;
+
+        execute!(
+            stdout,
+            SetForegroundColor(Color::Red),
+            cursor::MoveTo(name_left_padding, name_top),
+            Print(">"),
+            SetForegroundColor(Color::Reset)
+        )?;
+
+        execute!(
+            stdout,
+            cursor::MoveTo(name_left, name_top),
+            Print(&executable_name)
+        )?;
+
+        let instruction_text = if cfg!(target_os = "macos") {
+            "Enter the name of the Arma 3 executable (without .app extension)"
+        } else {
+            "Enter the name of the Arma 3 executable"
+        };
+
+        execute!(
+            stdout,
+            cursor::MoveTo(0, name_top + 2),
+            Print(instruction_text)
+        )?;
+
+        execute!(
+            stdout,
+            cursor::MoveTo(current_pos + name_left, name_top)
+        )?;
+
+        loop {
+            if event::poll(Duration::from_millis(500))? {
+                if let Event::Key(KeyEvent { code, .. }) = event::read()? {
+                    match code {
+                        KeyCode::Esc => {
+                            break;
+                        }
+                        KeyCode::Enter => {
+                            self.mod_manager.config.set_executable_name(executable_name);
+                            self.mod_manager.config.save()?;
+                            break;
+                        }
+                        KeyCode::Backspace => {
+                            if !executable_name.is_empty() && current_pos > 0 {
+                                executable_name.pop();
+                                current_pos -= 1;
+                            }
+                        }
+                        KeyCode::Char(c) => {
+                            executable_name.push(c);
+                            current_pos += 1;
+                        }
+                        _ => {}
+                    }
+
+                    execute!(stdout, terminal::Clear(terminal::ClearType::CurrentLine))?;
+
+                    execute!(
+                        stdout,
+                        SetForegroundColor(Color::Red),
+                        cursor::MoveTo(name_left_padding, name_top),
+                        Print(">"),
+                        SetForegroundColor(Color::Reset)
+                    )?;
+
+                    // Clear the previous line and update display
+                    execute!(
+                        stdout,
+                        cursor::MoveTo(name_left, name_top),
+                        Print(&executable_name)
+                    )?;
+
+                    execute!(
+                        stdout,
+                        cursor::MoveTo(0, name_top + 2),
+                        Print(instruction_text)
+                    )?;
+
+                    // Move cursor to the new position
+                    execute!(
+                        stdout,
+                        cursor::MoveTo(current_pos + name_left, name_top)
                     )?;
 
                     stdout.flush()?;

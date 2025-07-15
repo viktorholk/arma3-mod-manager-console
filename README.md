@@ -58,6 +58,7 @@ The application creates a config file at `~/arma3-mod-launcher-console-config.js
   "game_path": "/Users/user/Library/Application Support/Steam/steamapps/common/Arma 3",
   "workshop_path": "/Users/user/Library/Application Support/Steam/steamapps/workshop/content/107410",
   "custom_mods_path": "/Users/user/arma3-mod-manager-console-custom-mods",
+  "executable_name": "arma3",
   "enabled_mods": [
     
   ],
@@ -65,7 +66,9 @@ The application creates a config file at `~/arma3-mod-launcher-console-config.js
 }
 ````
 
-If the application cannot resolve the correct paths, you can edit them here.
+If the application cannot resolve the correct paths, you can edit them here. The `executable_name` field allows you to specify a different Arma 3 executable name:
+- On macOS: without the `.app` extension (e.g., "arma3")
+- On Linux: the actual executable name (e.g., "arma3_x64")
 
 ### Custom Mods
 
@@ -83,13 +86,13 @@ Simply move your mods into the custom mods folder. The folder will be alongside 
 1. **Check Config File**: Verify `~/arma3-mod-manager-console-config.json` has the correct Steam path.
 2. **Ensure Workshop Mods**: Confirm Arma 3 workshop mods are installed via Steam.
 3. **Locate Steam Path**:
-   - For MacOS check for `~/Library/Application Support/Steam`
-   - For Linux check for  `~/.local/share/Steam`
+   - For macOS: check for `~/Library/Application Support/Steam`
+   - For Linux: check for `~/.local/share/Steam`
 
 **Adjust and test** the paths, then rerun the application.
 
-### Mods Compatability
-Not 100% of Arma 3 mods are compatible with Mac or Linux.
+### Mods Compatibility
+Not 100% of Arma 3 mods are compatible with macOS or Linux.
 
 Mods that require .DLL files will not work so no ACE, TFR/ACRE or blastcore.
 
