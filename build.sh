@@ -15,6 +15,7 @@ TARGETS=(
 # Function to build for a specific target
 build_for_target() {
     local target=$1
+    rustup target add $target
 
     echo "Building for target ${target} in release mode..."
 
