@@ -203,6 +203,7 @@ impl<'a> Terminal<'a> {
             ("Refresh Mods", "R"),
             ("Set Custom Parameters", "F"),
             ("Set Executable Name", "E"),
+            ("Save Config", "<ENTER>"),
             ("Launch Game", "P"),
         ];
 
@@ -300,6 +301,14 @@ impl<'a> Terminal<'a> {
                         }
                         KeyCode::Char('p') => {
                             self.start_game()?;
+                        }
+
+                        KeyCode::Enter => {
+                            let enabled_mods = self.mod_manager.loaded_mods.filter(|m| m.enabled);
+                            self.mod_manager.config.update_mods(
+                                enabled_mods.iter().map(|m| m.identifier.clone()).collect(),
+                            );
+                            self.mod_manager.config.save()?;
                         }
 
                         KeyCode::Esc | KeyCode::Char('q') => break,
@@ -523,7 +532,11 @@ impl<'a> Terminal<'a> {
             SetForegroundColor(Color::Reset),
         )?;
 
-        execute!(stdout, cursor::MoveTo(0, 2), Print("Press <ENTER> to save, <ESC> to cancel"),)?;
+        execute!(
+            stdout,
+            cursor::MoveTo(0, 2),
+            Print("Press <ENTER> to save, <ESC> to cancel"),
+        )?;
 
         let name_left = 4;
         let name_top = 4;
@@ -555,10 +568,7 @@ impl<'a> Terminal<'a> {
             Print(instruction_text)
         )?;
 
-        execute!(
-            stdout,
-            cursor::MoveTo(current_pos + name_left, name_top)
-        )?;
+        execute!(stdout, cursor::MoveTo(current_pos + name_left, name_top))?;
 
         loop {
             if event::poll(Duration::from_millis(500))? {
@@ -609,10 +619,7 @@ impl<'a> Terminal<'a> {
                     )?;
 
                     // Move cursor to the new position
-                    execute!(
-                        stdout,
-                        cursor::MoveTo(current_pos + name_left, name_top)
-                    )?;
+                    execute!(stdout, cursor::MoveTo(current_pos + name_left, name_top))?;
 
                     stdout.flush()?;
                 }
