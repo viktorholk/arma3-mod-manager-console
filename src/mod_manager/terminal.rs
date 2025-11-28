@@ -57,7 +57,11 @@ impl<'a> Terminal<'a> {
 
         terminal::enable_raw_mode()?;
 
-        self.main_loop(&mut stdout)?;
+        if !self.mod_manager.config.is_valid() {
+            self.run_setup_wizard(&mut stdout)?;
+        } else {
+            self.main_loop(&mut stdout)?;
+        }
 
         terminal::disable_raw_mode()?;
 
@@ -66,6 +70,215 @@ impl<'a> Terminal<'a> {
         execute!(stdout, crossterm::cursor::Show)?;
 
         Ok(())
+    }
+
+    fn run_setup_wizard(&mut self, stdout: &mut Stdout) -> AppResult<()> {
+        // Try to auto-detect defaults
+        let (default_workshop, default_game) = match super::utils::setup_steam_paths() {
+            Ok((w, g)) => (w, g),
+            Err(_) => (String::new(), String::new()),
+        };
+
+        let mut workshop_path = self.mod_manager.config.get_workshop_path().to_string_lossy().to_string();
+        let mut game_path = self.mod_manager.config.get_game_path().to_string_lossy().to_string();
+
+        // If current config is empty, populate with defaults (auto-detected)
+        if workshop_path.is_empty() {
+            workshop_path = default_workshop;
+        }
+        if game_path.is_empty() {
+            game_path = default_game;
+        }
+
+        loop {
+            self.clear_screen(stdout)?;
+            
+            execute!(
+                stdout,
+                cursor::MoveTo(0, 0),
+                SetForegroundColor(Color::Cyan),
+                Print("Arma 3 Mod Manager - First Time Setup"),
+                SetForegroundColor(Color::Reset),
+                cursor::MoveTo(0, 2),
+                Print("It seems your configuration is invalid or missing."),
+                cursor::MoveTo(0, 3),
+                Print("Please verify your Steam paths below."),
+                cursor::MoveTo(0, 5),
+                Print(format!("1. Workshop Path: {}", workshop_path)),
+                cursor::MoveTo(0, 6),
+                Print(format!("2. Game Path:     {}", game_path)),
+                cursor::MoveTo(0, 8),
+                Print("Press <1> to edit Workshop Path"),
+                cursor::MoveTo(0, 9),
+                Print("Press <2> to edit Game Path"),
+                cursor::MoveTo(0, 11),
+                Print("Press <ENTER> to Save and Continue"),
+                cursor::MoveTo(0, 12),
+                Print("Press <ESC> or <Q> to Quit"),
+            )?;
+            stdout.flush()?;
+
+            if event::poll(Duration::from_millis(500))? {
+                if let Event::Key(KeyEvent { code, .. }) = event::read()? {
+                    match code {
+                        KeyCode::Char('1') => {
+                             workshop_path = self.input_screen(stdout, "Edit Workshop Path", "Enter Path:", &workshop_path)?;
+                        }
+                        KeyCode::Char('2') => {
+                             game_path = self.input_screen(stdout, "Edit Game Path", "Enter Path:", &game_path)?;
+                        }
+                        KeyCode::Enter => {
+                            self.mod_manager.config.set_workshop_path(workshop_path.clone());
+                            self.mod_manager.config.set_game_path(game_path.clone());
+                            
+                            if self.mod_manager.config.is_valid() {
+                                self.mod_manager.config.save()?;
+                                self.mod_manager.refresh_mods()?;
+                                break;
+                            } else {
+                                self.clear_screen(stdout)?;
+                                execute!(
+                                    stdout,
+                                    cursor::MoveTo(0, 0),
+                                    SetForegroundColor(Color::Red),
+                                    Print("Error: Paths are invalid! check if directories exist."),
+                                    SetForegroundColor(Color::Reset),
+                                    cursor::MoveTo(0, 2),
+                                    Print("Press any key to try again...")
+                                )?;
+                                stdout.flush()?;
+                                loop {
+                                    if event::poll(Duration::from_millis(500))? {
+                                        if let Event::Key(_) = event::read()? { break; }
+                                    }
+                                }
+                            }
+                        }
+                        KeyCode::Esc | KeyCode::Char('q') => {
+                             return Ok(()); // Exit app essentially, or return to empty loop which exits
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn input_screen(&self, stdout: &mut Stdout, title: &str, prompt: &str, initial_value: &str) -> AppResult<String> {
+        let mut input_string = initial_value.to_string();
+        let mut current_pos = input_string.len() as u16;
+
+        // Set up the terminal
+        execute!(stdout, cursor::Show)?;
+        execute!(stdout, SetCursorStyle::BlinkingUnderScore)?;
+        stdout.flush()?;
+
+        self.clear_screen(stdout)?;
+
+        execute!(
+            stdout,
+            SetForegroundColor(Color::Cyan),
+            cursor::MoveTo(0, 0),
+            Print(title),
+            SetForegroundColor(Color::Reset),
+        )?;
+
+        execute!(
+            stdout,
+            cursor::MoveTo(0, 2),
+            Print("Press <ENTER> to confirm, <ESC> to cancel"),
+        )?;
+
+        let prompt_left = 4;
+        let prompt_top = 4;
+        let prompt_left_padding = prompt_left - 3;
+
+        execute!(
+            stdout,
+            SetForegroundColor(Color::Red),
+            cursor::MoveTo(prompt_left_padding, prompt_top),
+            Print(">"),
+            SetForegroundColor(Color::Reset)
+        )?;
+        
+        execute!(
+             stdout,
+             cursor::MoveTo(prompt_left, prompt_top),
+             Print(format!("{} ", prompt))
+        )?;
+        
+        let input_start_col = prompt_left + prompt.len() as u16 + 1;
+        
+        // Initial render
+        execute!(
+            stdout,
+            cursor::MoveTo(input_start_col, prompt_top),
+            Print(&input_string)
+        )?;
+
+        execute!(stdout, cursor::MoveTo(input_start_col + current_pos, prompt_top))?;
+
+        loop {
+            if event::poll(Duration::from_millis(500))? {
+                if let Event::Key(KeyEvent { code, .. }) = event::read()? {
+                    match code {
+                        KeyCode::Esc => {
+                            // Restore terminal state before returning
+                             execute!(stdout, cursor::Hide)?;
+                             execute!(stdout, SetCursorStyle::DefaultUserShape)?;
+                             return Ok(initial_value.to_string());
+                        }
+                        KeyCode::Enter => {
+                            break;
+                        }
+                        KeyCode::Backspace => {
+                            if !input_string.is_empty() && current_pos > 0 {
+                                input_string.pop();
+                                current_pos -= 1;
+                            }
+                        }
+                        KeyCode::Char(c) => {
+                            input_string.push(c);
+                            current_pos += 1;
+                        }
+                        _ => {}
+                    }
+
+                    execute!(stdout, terminal::Clear(terminal::ClearType::CurrentLine))?;
+
+                    execute!(
+                        stdout,
+                        SetForegroundColor(Color::Red),
+                        cursor::MoveTo(prompt_left_padding, prompt_top),
+                        Print(">"),
+                        SetForegroundColor(Color::Reset)
+                    )?;
+                    
+                    execute!(
+                         stdout,
+                         cursor::MoveTo(prompt_left, prompt_top),
+                         Print(format!("{} ", prompt))
+                    )?;
+
+                    execute!(
+                        stdout,
+                        cursor::MoveTo(input_start_col, prompt_top),
+                        Print(&input_string)
+                    )?;
+
+                    // Move cursor to the new position
+                    execute!(stdout, cursor::MoveTo(input_start_col + current_pos, prompt_top))?;
+
+                    stdout.flush()?;
+                }
+            }
+        }
+        // Restore terminal state
+        execute!(stdout, cursor::Hide)?;
+        execute!(stdout, SetCursorStyle::DefaultUserShape)?;
+
+        Ok(input_string)
     }
 
     fn render(&self, stdout: &mut Stdout) -> AppResult<()> {

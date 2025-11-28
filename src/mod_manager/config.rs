@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 
-use crate::errors::{AppError, AppResult};
+use crate::errors::AppResult;
 
 use super::utils;
 
@@ -68,16 +68,8 @@ impl Config {
         Ok(new_config)
     }
 
-    fn valid(&self) -> AppResult<()> {
-        if !Path::new(&self.workshop_path).exists() {
-            return Err(AppError::InvalidPath(self.workshop_path.to_owned()));
-        }
-
-        if !Path::new(&self.game_path).exists() {
-            return Err(AppError::InvalidPath(self.game_path.to_owned()));
-        }
-
-        Ok(())
+    pub fn is_valid(&self) -> bool {
+        Path::new(&self.workshop_path).exists() && Path::new(&self.game_path).exists()
     }
 
     pub fn get_enabled_mods(&self) -> Vec<String> {
@@ -94,6 +86,14 @@ impl Config {
 
     pub fn get_workshop_path(&self) -> &Path {
         Path::new(&self.workshop_path)
+    }
+
+    pub fn set_game_path(&mut self, path: String) {
+        self.game_path = path;
+    }
+
+    pub fn set_workshop_path(&mut self, path: String) {
+        self.workshop_path = path;
     }
 
     pub fn get_custom_mods_path(&self) -> Option<&Path> {
@@ -123,8 +123,6 @@ impl Config {
 
     pub fn read() -> AppResult<Self> {
         let config: Config = super::file_handler::read_json(&Config::get_save_path()?)?;
-
-        config.valid()?;
 
         Ok(config)
     }

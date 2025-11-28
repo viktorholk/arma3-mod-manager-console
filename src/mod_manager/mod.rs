@@ -1,7 +1,4 @@
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 use phf::phf_map;
 
@@ -61,46 +58,38 @@ pub struct ModManager {
 
 impl ModManager {
     pub fn new(page_size: usize) -> AppResult<Self> {
-        match Config::read() {
-            Ok(config) => {
-                let mut loaded_mods = ModManager::get_installed_mods(&config)?;
+        // Try to read config. If it fails (NotFound), create a default empty one.
+        let config = match Config::read() {
+            Ok(c) => c,
+            Err(AppError::IoError(e)) if e.kind() == std::io::ErrorKind::NotFound => {
+                // Create a default config (empty paths) to start with.
+                // We don't save it yet; the Wizard will handle that.
+                Config::new(String::new(), String::new(), None)?
+            }
+            Err(e) => return Err(e),
+        };
 
-                for l_mod in &mut loaded_mods {
-                    if config.get_enabled_mods().contains(&l_mod.identifier) {
-                        l_mod.enabled = true;
+        // Attempt to load mods if config is somewhat valid, otherwise just start with empty list
+        let loaded_mods_vec = if config.is_valid() {
+            match ModManager::get_installed_mods(&config) {
+                Ok(mut mods) => {
+                     for l_mod in &mut mods {
+                        if config.get_enabled_mods().contains(&l_mod.identifier) {
+                            l_mod.enabled = true;
+                        }
                     }
-                }
-
-                Ok(ModManager {
-                    config,
-                    loaded_mods: Paginator::new(loaded_mods, page_size),
-                })
+                    mods
+                },
+                Err(_) => Vec::new(), // If path reading fails, just return empty list
             }
+        } else {
+            Vec::new()
+        };
 
-            Err(AppError::IoError(io_error)) if io_error.kind() == std::io::ErrorKind::NotFound => {
-                let (workshop_path, game_path) = utils::setup_steam_paths()?;
-                // Setup the customs mod folder
-                let custom_mods_path = utils::construct_path_string(
-                    Path::new(&utils::get_home_path()?),
-                    "arma3-mod-manager-console-custom-mods",
-                )?;
-
-                if !Path::new(&custom_mods_path).exists() {
-                    fs::create_dir(&custom_mods_path)?;
-                }
-
-                let config = Config::new(game_path, workshop_path, Some(custom_mods_path))?;
-                config.save()?;
-
-                let loaded_mods = ModManager::get_installed_mods(&config)?;
-
-                Ok(ModManager {
-                    config,
-                    loaded_mods: Paginator::new(loaded_mods, page_size),
-                })
-            }
-            Err(e) => Err(e),
-        }
+        Ok(ModManager {
+            config,
+            loaded_mods: Paginator::new(loaded_mods_vec, page_size),
+        })
     }
 
     pub fn start(&mut self) -> AppResult<()> {
