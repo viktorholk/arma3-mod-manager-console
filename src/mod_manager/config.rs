@@ -117,7 +117,7 @@ impl Config {
     }
 
     pub fn save(&self) -> AppResult<()> {
-        super::file_handler::write_json(&Config::get_save_path()?, &self)?;
+        super::file_handler::write_json(&Config::get_save_path()?, self)?;
         Ok(())
     }
 

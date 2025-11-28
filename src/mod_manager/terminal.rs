@@ -15,7 +15,7 @@ use crossterm::{
 
 use crate::errors::{AppError, AppResult};
 
-use super::ModManager;
+use super::{dependency_manager, ModManager};
 
 pub struct Terminal<'a> {
     mod_manager: &'a mut ModManager,
@@ -200,6 +200,7 @@ impl<'a> Terminal<'a> {
             ("Navigation", "<WASD>, <HJKL> or <ARROW KEYS>"),
             ("Toggle Selected Mod", "<SPACE>"),
             ("Toggle All Mods", "<CTRL> + <SPACE>"),
+            ("Check Dependencies", "C"),
             ("Refresh Mods", "R"),
             ("Set Custom Parameters", "F"),
             ("Set Executable Name", "E"),
@@ -261,17 +262,12 @@ impl<'a> Terminal<'a> {
                         }
 
                         KeyCode::Char(' ') if event.modifiers == KeyModifiers::CONTROL => {
-                            let value = if self
+                            let value = !self
                                 .mod_manager
                                 .loaded_mods
                                 .all_items()
                                 .iter()
-                                .all(|m| m.enabled)
-                            {
-                                false
-                            } else {
-                                true
-                            };
+                                .all(|m| m.enabled);
 
                             self.mod_manager
                                 .loaded_mods
@@ -292,6 +288,9 @@ impl<'a> Terminal<'a> {
 
                         KeyCode::Char('r') => {
                             self.mod_manager.refresh_mods()?;
+                        }
+                        KeyCode::Char('c') => {
+                            self.check_dependencies_screen(stdout)?;
                         }
                         KeyCode::Char('f') => {
                             self.set_custom_parameters_screen(stdout)?;
@@ -333,7 +332,7 @@ impl<'a> Terminal<'a> {
         let custom_mods_path = self.mod_manager.config.get_custom_mods_path();
 
         let executable_name = self.mod_manager.config.get_executable_name();
-        let executable_path = Self::get_executable_path(&game_path, &executable_name);
+        let executable_path = Self::get_executable_path(game_path, executable_name);
         let executable_path_str = executable_path.to_string_lossy().to_string();
 
         if !executable_path.exists() {
@@ -372,7 +371,7 @@ impl<'a> Terminal<'a> {
 
             // Build args
             let default_args = self.mod_manager.config.get_default_args();
-            if default_args.len() > 0 {
+            if !default_args.is_empty() {
                 command.arg(default_args);
             }
 
@@ -382,10 +381,19 @@ impl<'a> Terminal<'a> {
                 .collect::<Vec<_>>()
                 .join(";");
 
-            command.arg(&format!("-mod={}", mod_list));
+            command.arg(format!("-mod={}", mod_list));
         }
 
-        command.output()?;
+        #[cfg(target_os = "macos")]
+        {
+            if let Some(overlay_path) = super::utils::get_steam_overlay_path() {
+                command.env("DYLD_INSERT_LIBRARIES", overlay_path);
+                command.env("DYLD_FORCE_FLAT_NAMESPACE", "1");
+            }
+            command.env("SteamAppId", "107410");
+        }
+
+        command.spawn()?;
 
         Ok(())
     }
@@ -628,6 +636,202 @@ impl<'a> Terminal<'a> {
         // Restore terminal state
         execute!(stdout, cursor::Hide)?;
         execute!(stdout, SetCursorStyle::DefaultUserShape)?;
+
+        Ok(())
+    }
+
+    fn check_dependencies_screen(&mut self, stdout: &mut Stdout) -> AppResult<()> {
+        let current_page = self.mod_manager.loaded_mods.current_page;
+        let page_size = self.mod_manager.loaded_mods.page_size;
+        let index = self.selected_index + (current_page * page_size);
+        let selected_mod = &self.mod_manager.loaded_mods.all_items()[index];
+
+        if selected_mod.is_custom || selected_mod.is_cdlc {
+            // Show message that we can't check dependencies for custom/CDLC mods
+            self.clear_screen(stdout)?;
+            execute!(
+                stdout,
+                cursor::MoveTo(0, 0),
+                SetForegroundColor(Color::Yellow),
+                Print("Cannot check dependencies for Local/CDLC mods."),
+                SetForegroundColor(Color::Reset),
+                cursor::MoveTo(0, 2),
+                Print("Press any key to return...")
+            )?;
+            stdout.flush()?;
+
+            loop {
+                if event::poll(Duration::from_millis(500))? {
+                    if let Event::Key(_) = event::read()? {
+                        break;
+                    }
+                }
+            }
+            return Ok(());
+        }
+
+        let mod_id = selected_mod.identifier.clone();
+        let mod_name = selected_mod.name.clone();
+
+        self.clear_screen(stdout)?;
+        execute!(
+            stdout,
+            cursor::MoveTo(0, 0),
+            SetForegroundColor(Color::Cyan),
+            Print(format!("Checking dependencies for: {}", mod_name)),
+            SetForegroundColor(Color::Reset),
+            cursor::MoveTo(0, 2),
+            Print("Fetching data from Steam Workshop... Please wait."),
+        )?;
+        stdout.flush()?;
+
+        let dependencies = match dependency_manager::fetch_dependencies(&mod_id) {
+            Ok(deps) => deps,
+            Err(e) => {
+                execute!(
+                    stdout,
+                    cursor::MoveTo(0, 4),
+                    SetForegroundColor(Color::Red),
+                    Print(format!("Error fetching dependencies: {}", e)),
+                    SetForegroundColor(Color::Reset),
+                    cursor::MoveTo(0, 6),
+                    Print("Press any key to return...")
+                )?;
+                stdout.flush()?;
+                loop {
+                    if event::poll(Duration::from_millis(500))? {
+                        if let Event::Key(_) = event::read()? {
+                            break;
+                        }
+                    }
+                }
+                return Ok(());
+            }
+        };
+
+        // Process dependencies status
+        // We need to know which ones are installed, enabled, etc.
+        // We'll map them to a struct or tuple
+        #[derive(Clone)]
+        struct DepStatus {
+            id: String,
+            name: String,
+            installed: bool,
+            enabled: bool,
+        }
+
+        let mut dep_statuses = Vec::new();
+        let installed_mods = self.mod_manager.loaded_mods.all_items();
+
+        for dep in dependencies {
+            let found_mod = installed_mods.iter().find(|m| m.identifier == dep.id);
+            dep_statuses.push(DepStatus {
+                id: dep.id,
+                name: dep.name,
+                installed: found_mod.is_some(),
+                enabled: found_mod.map(|m| m.enabled).unwrap_or(false),
+            });
+        }
+
+        loop {
+            self.clear_screen(stdout)?;
+            execute!(
+                stdout,
+                cursor::MoveTo(0, 0),
+                SetForegroundColor(Color::Cyan),
+                Print(format!("Dependencies for: {}", mod_name)),
+                SetForegroundColor(Color::Reset),
+            )?;
+
+            if dep_statuses.is_empty() {
+                execute!(
+                    stdout,
+                    cursor::MoveTo(0, 2),
+                    Print("No dependencies found or required items not listed."),
+                )?;
+            } else {
+                let mut y_offset = 2;
+                execute!(
+                    stdout,
+                    cursor::MoveTo(0, y_offset),
+                    Print(format!("{:<15} {:<40} {:<15}", "ID", "Name", "Status")),
+                )?;
+                y_offset += 2;
+
+                for dep in &dep_statuses {
+                    let status_str = if !dep.installed {
+                        "MISSING"
+                    } else if dep.enabled {
+                        "Enabled"
+                    } else {
+                        "Disabled"
+                    };
+
+                    let color = if !dep.installed {
+                        Color::Red
+                    } else if dep.enabled {
+                        Color::Green
+                    } else {
+                        Color::Yellow
+                    };
+
+                    execute!(
+                        stdout,
+                        cursor::MoveTo(0, y_offset),
+                        SetForegroundColor(color),
+                        Print(format!(
+                            "{:<15} {:<40} {:<15}",
+                            dep.id, dep.name, status_str
+                        )),
+                        SetForegroundColor(Color::Reset),
+                    )?;
+                    y_offset += 1;
+                }
+            }
+
+            let info_y = if dep_statuses.is_empty() {
+                4
+            } else {
+                dep_statuses.len() as u16 + 5
+            };
+            execute!(
+                stdout,
+                cursor::MoveTo(0, info_y),
+                Print("Press <E> to Enable all installed, <ESC> to return."),
+            )?;
+            stdout.flush()?;
+
+            if event::poll(Duration::from_millis(500))? {
+                if let Event::Key(KeyEvent { code, .. }) = event::read()? {
+                    match code {
+                        KeyCode::Esc => break,
+                        KeyCode::Char('e') => {
+                            // Enable all installed dependencies
+                            let ids_to_enable: Vec<String> = dep_statuses
+                                .iter()
+                                .filter(|d| d.installed && !d.enabled)
+                                .map(|d| d.id.clone())
+                                .collect();
+
+                            if !ids_to_enable.is_empty() {
+                                for m in self.mod_manager.loaded_mods.all_items_mut() {
+                                    if ids_to_enable.contains(&m.identifier) {
+                                        m.enabled = true;
+                                    }
+                                }
+                                // Update statuses locally for the loop
+                                for d in &mut dep_statuses {
+                                    if d.installed {
+                                        d.enabled = true;
+                                    }
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
 
         Ok(())
     }

@@ -10,6 +10,7 @@ use self::{config::Config, paginator::Paginator, terminal::Terminal};
 use crate::errors::{AppError, AppResult};
 
 mod config;
+pub mod dependency_manager;
 mod file_handler;
 mod paginator;
 mod terminal;
@@ -48,14 +49,14 @@ impl Mod {
     }
 
     pub fn get_path(&self, path: &Path) -> PathBuf {
-        path.join(self.identifier.to_string())
+        path.join(&self.identifier)
     }
 }
 
 #[derive(Debug)]
 pub struct ModManager {
-    config: Config,
-    loaded_mods: Paginator<Mod>,
+    pub config: Config,
+    pub loaded_mods: Paginator<Mod>,
 }
 
 impl ModManager {
@@ -80,7 +81,7 @@ impl ModManager {
                 let (workshop_path, game_path) = utils::setup_steam_paths()?;
                 // Setup the customs mod folder
                 let custom_mods_path = utils::construct_path_string(
-                    &Path::new(&utils::get_home_path()?),
+                    Path::new(&utils::get_home_path()?),
                     "arma3-mod-manager-console-custom-mods",
                 )?;
 
@@ -153,5 +154,88 @@ impl ModManager {
         mods.sort_by(|a, b| a.name.cmp(&b.name));
 
         Ok(mods)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::env;
+    use std::fs;
+
+    #[test]
+    fn test_mod_manager_full_flow() {
+        // Setup paths
+        let mut fake_home = env::current_dir().unwrap();
+        fake_home.push("fake_home_test"); // Changed name to avoid conflict/confusion
+
+        let workshop_path =
+            fake_home.join("Library/Application Support/Steam/steamapps/workshop/content/107410");
+        let game_path = fake_home.join("Library/Application Support/Steam/steamapps/common/Arma 3");
+        let mod_dir = workshop_path.join("123456");
+        let meta_file = mod_dir.join("meta.cpp");
+
+        // Cleanup previous run if exists
+        if fake_home.exists() {
+            let _ = fs::remove_dir_all(&fake_home);
+        }
+
+        // Create directories
+        fs::create_dir_all(&mod_dir).expect("Failed to create mod directory");
+        fs::create_dir_all(&game_path).expect("Failed to create game directory");
+
+        // Create fake mod meta.cpp
+        fs::write(&meta_file, "name = \"Test Mod\";").expect("Failed to write meta.cpp");
+
+        // Set the HOME env var for this test
+        env::set_var("HOME", &fake_home);
+
+        // Initialize ModManager
+        let manager = ModManager::new(10).expect("Failed to initialize ModManager");
+
+        // Verify Config was created
+        let config_path = fake_home.join("arma3-mod-manager-console-config.json");
+        assert!(config_path.exists(), "Config file was not created");
+
+        // Verify "Test Mod" was loaded
+        let mods = manager.loaded_mods.all_items();
+        let found_mod = mods.iter().find(|m| m.name == "Test Mod");
+
+        assert!(
+            found_mod.is_some(),
+            "Test Mod was not found in loaded mods. Found: {:?}",
+            mods.iter().map(|m| &m.name).collect::<Vec<_>>()
+        );
+        let found_mod = found_mod.unwrap();
+
+        // Test Symlink Creation
+        // We must fetch paths from config to ensure it picked up the right ones
+        let config_workshop_path = manager.config.get_workshop_path();
+        let config_game_path = manager.config.get_game_path();
+
+        let mod_path = found_mod.get_path(config_workshop_path);
+        let mod_paths = vec![mod_path];
+
+        // Create symlinks
+        file_handler::create_sym_links(config_game_path, mod_paths)
+            .expect("Failed to create symlinks");
+
+        // Verify symlink exists
+        let symlink_path = config_game_path.join(&found_mod.identifier);
+        assert!(
+            symlink_path.exists(),
+            "Symlink was not created at {:?}",
+            symlink_path
+        );
+        assert!(symlink_path.is_symlink(), "Created file is not a symlink");
+
+        // Test Symlink Removal
+        file_handler::remove_dir_symlinks(config_game_path).expect("Failed to remove symlinks");
+
+        // Verify symlink is gone
+        assert!(!symlink_path.exists(), "Symlink was not removed");
+
+        // Cleanup
+        let _ = fs::remove_dir_all(&fake_home);
     }
 }
