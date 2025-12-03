@@ -92,3 +92,23 @@ fn titleize(s: &str) -> String {
         Some(f) => f.to_uppercase().chain(c).collect(),
     }
 }
+
+#[cfg(target_os = "macos")]
+pub fn get_steam_overlay_path() -> Option<PathBuf> {
+    let home_path = get_home_path().ok()?;
+
+    let paths = vec![
+        // Default location for Steam on macOS
+        Path::new(&home_path).join(
+            "Library/Application Support/Steam/Steam.AppBundle/Steam/Contents/MacOS/gameoverlayrenderer.dylib",
+        ),
+        // Alternative location
+        Path::new(&home_path).join(
+            "Library/Application Support/Steam/Contents/MacOS/gameoverlayrenderer.dylib",
+        ),
+        // Global application location
+        PathBuf::from("/Applications/Steam.app/Contents/MacOS/gameoverlayrenderer.dylib"),
+    ];
+
+    paths.into_iter().find(|path| path.exists())
+}

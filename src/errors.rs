@@ -21,5 +21,10 @@ pub enum AppError {
 
     #[error("Unsupported platform")]
     UnsupportedPlatform,
-}
 
+    #[error("Network error: {0}")]
+    NetworkError(String),
+
+    #[error("Regex error")]
+    RegexError,
+}
