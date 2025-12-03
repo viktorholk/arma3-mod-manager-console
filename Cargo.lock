@@ -19,7 +19,7 @@ dependencies = [
 
 [[package]]
 name = "arma3-mod-manager-console"
-version = "0.3.3"
+version = "0.4.0"
 dependencies = [
  "crossterm",
  "phf",
