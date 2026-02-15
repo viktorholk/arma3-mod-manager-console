@@ -339,10 +339,18 @@ impl<'a> Terminal<'a> {
                 "Arma 3 Mod Manager Console ({})",
                 env!("CARGO_PKG_VERSION")
             )),
+            cursor::MoveTo(0, top_offset + 1),
+            Print(format!(
+                "Config file: {}",
+                match Config::get_save_path() {
+                    Ok(path) => path.display().to_string(),
+                    Err(e) => format!("Error: {}", e),
+                }
+            )),
             SetForegroundColor(Color::Reset)
         )?;
 
-        top_offset += 2;
+        top_offset += 3;
 
         let enabled_mods = self.mod_manager.loaded_mods.filter(|m| m.enabled).len();
         let total_mods = self.mod_manager.loaded_mods.all_items().len();
