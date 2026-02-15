@@ -3,11 +3,10 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 
+use crate::errors::AppError;
 use crate::errors::AppResult;
 
 use super::utils;
-
-const SAVE_FILE: &str = "arma3-mod-manager-console-config.json";
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Config {
@@ -44,11 +43,29 @@ fn default_executable_name() -> String {
     "arma3".to_string()
 }
 
-impl Config {
-    fn get_save_path() -> AppResult<PathBuf> {
-        let home_path = utils::get_home_path()?;
+fn get_config_path() -> AppResult<PathBuf> {
+    let home_path = utils::get_home_path()?;
 
-        Ok(Path::new(&home_path).join(SAVE_FILE))
+    // Define OS-specific config paths
+    let config_path = match std::env::consts::OS {
+        "windows" => Path::new(&home_path).join("arma3-mod-manager-console-config.json"),
+        "macos" => Path::new(&home_path)
+            .join(".config")
+            .join("arma3-mod-manager-console")
+            .join("config.json"),
+        "linux" => Path::new(&home_path)
+            .join(".config")
+            .join("arma3-mod-manager-console")
+            .join("config.json"),
+        _ => return Err(AppError::UnsupportedPlatform),
+    };
+    return Ok(config_path);
+}
+
+impl Config {
+    pub fn get_save_path() -> AppResult<PathBuf> {
+        let config_path = get_config_path()?;
+        Ok(config_path)
     }
 
     pub fn new(
@@ -117,7 +134,11 @@ impl Config {
     }
 
     pub fn save(&self) -> AppResult<()> {
-        super::file_handler::write_json(&Config::get_save_path()?, self)?;
+        let config_path = &Config::get_save_path()?;
+        if let Some(parent) = config_path.parent() {
+            utils::ensure_directory_exists(&parent.to_path_buf())?;
+        }
+        super::file_handler::write_json(config_path, self)?;
         Ok(())
     }
 

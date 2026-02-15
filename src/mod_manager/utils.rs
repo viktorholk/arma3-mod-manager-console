@@ -11,6 +11,14 @@ use crate::errors::{AppError, AppResult};
 
 use super::Mod;
 
+pub fn ensure_directory_exists(path: &PathBuf) -> AppResult<()> {
+    if !path.exists() {
+        fs::create_dir_all(path)
+            .map_err(|_| AppError::InvalidPath(path.to_string_lossy().to_string()))?;
+    }
+    Ok(())
+}
+
 pub fn get_home_path() -> AppResult<OsString> {
     match env::var_os("HOME") {
         Some(home_path) => Ok(home_path),

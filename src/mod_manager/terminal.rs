@@ -112,7 +112,13 @@ impl<'a> Terminal<'a> {
                 cursor::MoveTo(0, 9),
                 Print("Press <2> to edit Game Path"),
                 cursor::MoveTo(0, 11),
-                Print("Press <ENTER> to Save and Continue"),
+                Print(format!(
+                    "Press <ENTER> to Save ({}) and Continue",
+                    match Config::get_save_path() {
+                        Ok(path) => path.display().to_string(),
+                        Err(e) => format!("Error: {}", e),
+                    }
+                )),
                 cursor::MoveTo(0, 12),
                 Print("Press <ESC> or <Q> to Quit"),
             )?;
