@@ -51,7 +51,10 @@ cargo run
 ````
 
 ## Config
-The application creates a config file at `~/arma3-mod-launcher-console-config.json` which looks like this:
+The application creates a config file which looks like this:
+
+- Windows: `~/arma3-mod-launcher-console-config.json`
+- Linus & MacOS: `~/.config/arma3-mod-launcher-console/config.json`
 
 ````
 {
@@ -83,7 +86,7 @@ Simply move your mods into the custom mods folder. The folder will be alongside 
 `Error: InvalidPath("/Users/user/Library/Application Support/Steam/steamapps/workshop/content/107410")`
 
 **Steps to Resolve**:
-1. **Check Config File**: Verify `~/arma3-mod-manager-console-config.json` has the correct Steam path.
+1. **Check Config File**: Verify config file ( location see above ) has the correct Steam path.
 2. **Ensure Workshop Mods**: Confirm Arma 3 workshop mods are installed via Steam.
 3. **Locate Steam Path**:
    - For macOS: check for `~/Library/Application Support/Steam`

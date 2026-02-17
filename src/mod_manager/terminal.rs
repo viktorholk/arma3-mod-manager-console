@@ -13,7 +13,10 @@ use crossterm::{
     terminal,
 };
 
-use crate::errors::{AppError, AppResult};
+use crate::{
+    errors::{AppError, AppResult},
+    mod_manager::config::Config,
+};
 
 use super::{dependency_manager, ModManager};
 
@@ -79,8 +82,18 @@ impl<'a> Terminal<'a> {
             Err(_) => (String::new(), String::new()),
         };
 
-        let mut workshop_path = self.mod_manager.config.get_workshop_path().to_string_lossy().to_string();
-        let mut game_path = self.mod_manager.config.get_game_path().to_string_lossy().to_string();
+        let mut workshop_path = self
+            .mod_manager
+            .config
+            .get_workshop_path()
+            .to_string_lossy()
+            .to_string();
+        let mut game_path = self
+            .mod_manager
+            .config
+            .get_game_path()
+            .to_string_lossy()
+            .to_string();
 
         // If current config is empty, populate with defaults (auto-detected)
         if workshop_path.is_empty() {
@@ -92,7 +105,7 @@ impl<'a> Terminal<'a> {
 
         loop {
             self.clear_screen(stdout)?;
-            
+
             execute!(
                 stdout,
                 cursor::MoveTo(0, 0),
@@ -112,7 +125,13 @@ impl<'a> Terminal<'a> {
                 cursor::MoveTo(0, 9),
                 Print("Press <2> to edit Game Path"),
                 cursor::MoveTo(0, 11),
-                Print("Press <ENTER> to Save and Continue"),
+                Print(format!(
+                    "Press <ENTER> to Save ({}) and Continue",
+                    match Config::get_save_path() {
+                        Ok(path) => path.display().to_string(),
+                        Err(e) => format!("Error: {}", e),
+                    }
+                )),
                 cursor::MoveTo(0, 12),
                 Print("Press <ESC> or <Q> to Quit"),
             )?;
@@ -122,15 +141,27 @@ impl<'a> Terminal<'a> {
                 if let Event::Key(KeyEvent { code, .. }) = event::read()? {
                     match code {
                         KeyCode::Char('1') => {
-                             workshop_path = self.input_screen(stdout, "Edit Workshop Path", "Enter Path:", &workshop_path)?;
+                            workshop_path = self.input_screen(
+                                stdout,
+                                "Edit Workshop Path",
+                                "Enter Path:",
+                                &workshop_path,
+                            )?;
                         }
                         KeyCode::Char('2') => {
-                             game_path = self.input_screen(stdout, "Edit Game Path", "Enter Path:", &game_path)?;
+                            game_path = self.input_screen(
+                                stdout,
+                                "Edit Game Path",
+                                "Enter Path:",
+                                &game_path,
+                            )?;
                         }
                         KeyCode::Enter => {
-                            self.mod_manager.config.set_workshop_path(workshop_path.clone());
+                            self.mod_manager
+                                .config
+                                .set_workshop_path(workshop_path.clone());
                             self.mod_manager.config.set_game_path(game_path.clone());
-                            
+
                             if self.mod_manager.config.is_valid() {
                                 self.mod_manager.config.save()?;
                                 self.mod_manager.refresh_mods()?;
@@ -149,13 +180,15 @@ impl<'a> Terminal<'a> {
                                 stdout.flush()?;
                                 loop {
                                     if event::poll(Duration::from_millis(500))? {
-                                        if let Event::Key(_) = event::read()? { break; }
+                                        if let Event::Key(_) = event::read()? {
+                                            break;
+                                        }
                                     }
                                 }
                             }
                         }
                         KeyCode::Esc | KeyCode::Char('q') => {
-                             return Ok(()); // Exit app essentially, or return to empty loop which exits
+                            return Ok(()); // Exit app essentially, or return to empty loop which exits
                         }
                         _ => {}
                     }
@@ -165,7 +198,13 @@ impl<'a> Terminal<'a> {
         Ok(())
     }
 
-    fn input_screen(&self, stdout: &mut Stdout, title: &str, prompt: &str, initial_value: &str) -> AppResult<String> {
+    fn input_screen(
+        &self,
+        stdout: &mut Stdout,
+        title: &str,
+        prompt: &str,
+        initial_value: &str,
+    ) -> AppResult<String> {
         let mut input_string = initial_value.to_string();
         let mut current_pos = input_string.len() as u16;
 
@@ -201,15 +240,15 @@ impl<'a> Terminal<'a> {
             Print(">"),
             SetForegroundColor(Color::Reset)
         )?;
-        
+
         execute!(
-             stdout,
-             cursor::MoveTo(prompt_left, prompt_top),
-             Print(format!("{} ", prompt))
+            stdout,
+            cursor::MoveTo(prompt_left, prompt_top),
+            Print(format!("{} ", prompt))
         )?;
-        
+
         let input_start_col = prompt_left + prompt.len() as u16 + 1;
-        
+
         // Initial render
         execute!(
             stdout,
@@ -217,7 +256,10 @@ impl<'a> Terminal<'a> {
             Print(&input_string)
         )?;
 
-        execute!(stdout, cursor::MoveTo(input_start_col + current_pos, prompt_top))?;
+        execute!(
+            stdout,
+            cursor::MoveTo(input_start_col + current_pos, prompt_top)
+        )?;
 
         loop {
             if event::poll(Duration::from_millis(500))? {
@@ -225,9 +267,9 @@ impl<'a> Terminal<'a> {
                     match code {
                         KeyCode::Esc => {
                             // Restore terminal state before returning
-                             execute!(stdout, cursor::Hide)?;
-                             execute!(stdout, SetCursorStyle::DefaultUserShape)?;
-                             return Ok(initial_value.to_string());
+                            execute!(stdout, cursor::Hide)?;
+                            execute!(stdout, SetCursorStyle::DefaultUserShape)?;
+                            return Ok(initial_value.to_string());
                         }
                         KeyCode::Enter => {
                             break;
@@ -254,11 +296,11 @@ impl<'a> Terminal<'a> {
                         Print(">"),
                         SetForegroundColor(Color::Reset)
                     )?;
-                    
+
                     execute!(
-                         stdout,
-                         cursor::MoveTo(prompt_left, prompt_top),
-                         Print(format!("{} ", prompt))
+                        stdout,
+                        cursor::MoveTo(prompt_left, prompt_top),
+                        Print(format!("{} ", prompt))
                     )?;
 
                     execute!(
@@ -268,7 +310,10 @@ impl<'a> Terminal<'a> {
                     )?;
 
                     // Move cursor to the new position
-                    execute!(stdout, cursor::MoveTo(input_start_col + current_pos, prompt_top))?;
+                    execute!(
+                        stdout,
+                        cursor::MoveTo(input_start_col + current_pos, prompt_top)
+                    )?;
 
                     stdout.flush()?;
                 }
@@ -294,10 +339,18 @@ impl<'a> Terminal<'a> {
                 "Arma 3 Mod Manager Console ({})",
                 env!("CARGO_PKG_VERSION")
             )),
+            cursor::MoveTo(0, top_offset + 1),
+            Print(format!(
+                "Config file: {}",
+                match Config::get_save_path() {
+                    Ok(path) => path.display().to_string(),
+                    Err(e) => format!("Error: {}", e),
+                }
+            )),
             SetForegroundColor(Color::Reset)
         )?;
 
-        top_offset += 2;
+        top_offset += 3;
 
         let enabled_mods = self.mod_manager.loaded_mods.filter(|m| m.enabled).len();
         let total_mods = self.mod_manager.loaded_mods.all_items().len();
