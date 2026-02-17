@@ -1,0 +1,35 @@
+---
+const controls = [
+  { action: 'Navigate up', keys: ['W', 'K', '↑'] },
+  { action: 'Navigate down', keys: ['S', 'J', '↓'] },
+  { action: 'Toggle mod on/off', keys: ['Space'] },
+  { action: 'Switch to presets', keys: ['Tab'] },
+  { action: 'Launch Arma 3', keys: ['P'] },
+  { action: 'Search mods', keys: ['/'] },
+  { action: 'Check dependencies', keys: ['D'] },
+  { action: 'Quit', keys: ['Q'] },
+];
+---
+
+<section id="controls">
+  <div class="container fade-in">
+    <h2><span class="accent">#</span> Controls</h2>
+    <table class="controls-table">
+      <tbody>
+        {controls.map((c) => (
+          <tr>
+            <td>{c.action}</td>
+            <td>
+              {c.keys.map((k, i) => (
+                <>
+                  <kbd>{k}</kbd>
+                  {i < c.keys.length - 1 && <span> </span>}
+                </>
+              ))}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+</section>

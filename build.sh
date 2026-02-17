@@ -1,8 +1,9 @@
 
 #!/bin/bash
 
-# Project name
+# Project name and version (read from Cargo.toml)
 PROJECT_NAME="arma3-mod-manager-console"
+VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
 
 # Define targets
 TARGETS=(
@@ -34,10 +35,10 @@ build_for_target() {
         chmod +x "${binary_path}"
 
         # Create the zip file containing only the binary
-        (cd "target/${target}/release" && zip "${PROJECT_NAME}-${target}-release.zip" "${PROJECT_NAME}")
+        (cd "target/${target}/release" && zip "${PROJECT_NAME}-${VERSION}-${target}-release.zip" "${PROJECT_NAME}")
 
         # Move the zip file to the project root
-        mv "target/${target}/release/${PROJECT_NAME}-${target}-release.zip" .
+        mv "target/${target}/release/${PROJECT_NAME}-${VERSION}-${target}-release.zip" .
     else
         echo "Binary not found for target ${target} in release mode."
     fi

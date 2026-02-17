@@ -2,3 +2,6 @@
 config.json
 .DS_Store
 *.zip
+docs/node_modules/
+docs/dist/
+docs/.astro/

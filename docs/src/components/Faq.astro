@@ -1,0 +1,42 @@
+---
+const faqs = [
+  {
+    q: 'Does it work on Windows?',
+    a: 'No. This tool is built for Linux and macOS only. On Windows, the official Arma 3 Launcher already handles mod management well.',
+  },
+  {
+    q: 'Do I need the Arma 3 Launcher installed?',
+    a: 'No. The mod manager works independently. You just need Arma 3 installed via Steam with your Workshop mods subscribed.',
+  },
+  {
+    q: 'Are all Arma 3 mods compatible?',
+    a: 'Not all. Mods that rely on Windows-only .DLL files (such as ACE, TFAR, ACRE, or Blastcore) will not work on macOS or Linux. Most content mods (maps, units, vehicles) work fine.',
+  },
+  {
+    q: 'Can I use custom/offline mods?',
+    a: 'Yes. Place them in the custom mods folder that the application creates alongside your config file. They will show up in the mod list automatically.',
+  },
+  {
+    q: 'Where is the config file stored?',
+    a: 'On Linux and macOS it is located at <code>~/.config/arma3-mod-launcher-console/config.json</code>. You can edit it manually to fix paths or change launch arguments.',
+  },
+  {
+    q: 'I get an "InvalidPath" error on startup',
+    a: 'This means the application could not find your Arma 3 or Workshop directory. Open the config file and verify that <code>game_path</code> and <code>workshop_path</code> point to the correct Steam directories on your system.',
+  },
+];
+---
+
+<section id="faq">
+  <div class="container fade-in">
+    <h2><span class="accent">#</span> FAQ</h2>
+    <div class="faq-list">
+      {faqs.map((f) => (
+        <details class="faq-item">
+          <summary>{f.q}</summary>
+          <p set:html={f.a} />
+        </details>
+      ))}
+    </div>
+  </div>
+</section>

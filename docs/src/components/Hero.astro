@@ -1,0 +1,26 @@
+---
+import { getLatestRelease } from '../lib/release';
+
+const release = await getLatestRelease();
+const version = release.tag_name;
+const gifUrl = 'https://github.com/user-attachments/assets/f5f58180-e5f4-4442-a448-c60f81df907d';
+---
+
+<section class="hero">
+  <div class="container">
+    <h1>Arma 3 <span class="accent">Mod Manager</span> Console</h1>
+    <p class="subtitle">Manage your Arma 3 mods from the terminal. No launcher needed.</p>
+    <div class="ctas">
+      <a href="#download" class="btn btn-primary">Download v{version}</a>
+      <a href="https://github.com/viktorholk/arma3-mod-manager-console" class="btn btn-outline">View on GitHub</a>
+    </div>
+    <div class="terminal-frame fade-in">
+      <div class="terminal-titlebar">
+        <span class="terminal-dot red"></span>
+        <span class="terminal-dot yellow"></span>
+        <span class="terminal-dot green"></span>
+      </div>
+      <img src={gifUrl} alt="Arma 3 Mod Manager Console demo" loading="lazy" />
+    </div>
+  </div>
+</section>
