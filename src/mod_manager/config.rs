@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Deserializer, Serialize};
@@ -7,6 +8,10 @@ use crate::errors::AppError;
 use crate::errors::AppResult;
 
 use super::utils;
+
+fn default_active_preset() -> String {
+    "Default".to_string()
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Config {
@@ -18,6 +23,10 @@ pub struct Config {
     #[serde(deserialize_with = "deserialize_mods")]
     enabled_mods: Vec<String>,
     default_args: String,
+    #[serde(default)]
+    presets: HashMap<String, Vec<String>>,
+    #[serde(default = "default_active_preset")]
+    active_preset: String,
 }
 
 // Backwards compatibility supports
@@ -73,6 +82,9 @@ impl Config {
         workshop_path: String,
         custom_mods_path: Option<String>,
     ) -> AppResult<Self> {
+        let mut presets = HashMap::new();
+        presets.insert("Default".to_string(), Vec::new());
+
         let new_config = Config {
             game_path,
             workshop_path,
@@ -80,9 +92,33 @@ impl Config {
             executable_name: default_executable_name(),
             enabled_mods: Vec::new(),
             default_args: "-noSplash -skipIntro -world=empty".to_string(),
+            presets,
+            active_preset: default_active_preset(),
         };
 
         Ok(new_config)
+    }
+
+    /// Migrate old configs that don't have presets yet.
+    fn migrate_if_needed(&mut self) {
+        if self.presets.is_empty() {
+            if self.enabled_mods.is_empty() {
+                self.presets.insert("Default".to_string(), Vec::new());
+            } else {
+                self.presets
+                    .insert("Default".to_string(), self.enabled_mods.clone());
+            }
+        }
+
+        // Ensure active_preset points to an existing preset
+        if !self.presets.contains_key(&self.active_preset) {
+            self.active_preset = self
+                .presets
+                .keys()
+                .next()
+                .cloned()
+                .unwrap_or_else(|| "Default".to_string());
+        }
     }
 
     pub fn is_valid(&self) -> bool {
@@ -90,10 +126,15 @@ impl Config {
     }
 
     pub fn get_enabled_mods(&self) -> Vec<String> {
-        self.enabled_mods.clone()
+        self.presets
+            .get(&self.active_preset)
+            .cloned()
+            .unwrap_or_default()
     }
 
     pub fn update_mods(&mut self, mods: Vec<String>) {
+        self.presets
+            .insert(self.active_preset.clone(), mods.clone());
         self.enabled_mods = mods;
     }
 
@@ -133,6 +174,73 @@ impl Config {
         self.default_args = args;
     }
 
+    // Preset methods
+
+    pub fn get_active_preset_name(&self) -> &str {
+        &self.active_preset
+    }
+
+    pub fn get_preset_names(&self) -> Vec<String> {
+        let mut names: Vec<String> = self.presets.keys().cloned().collect();
+        names.sort();
+        names
+    }
+
+    pub fn get_preset_mod_count(&self, name: &str) -> usize {
+        self.presets.get(name).map(|v| v.len()).unwrap_or(0)
+    }
+
+    pub fn set_active_preset(&mut self, name: &str) {
+        if self.presets.contains_key(name) {
+            self.active_preset = name.to_string();
+            // Keep enabled_mods in sync
+            self.enabled_mods = self.presets.get(name).cloned().unwrap_or_default();
+        }
+    }
+
+    pub fn save_preset(&mut self, name: String, mods: Vec<String>) {
+        self.presets.insert(name, mods);
+    }
+
+    pub fn rename_preset(&mut self, old: &str, new: String) -> bool {
+        if let Some(mods) = self.presets.remove(old) {
+            let was_active = self.active_preset == old;
+            self.presets.insert(new.clone(), mods);
+            if was_active {
+                self.active_preset = new;
+            }
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn delete_preset(&mut self, name: &str) -> bool {
+        // Guard against deleting the last preset
+        if self.presets.len() <= 1 {
+            return false;
+        }
+        if self.presets.remove(name).is_some() {
+            // If we deleted the active preset, switch to another one
+            if self.active_preset == name {
+                self.active_preset = self
+                    .presets
+                    .keys()
+                    .next()
+                    .cloned()
+                    .unwrap_or_else(|| "Default".to_string());
+                self.enabled_mods = self
+                    .presets
+                    .get(&self.active_preset)
+                    .cloned()
+                    .unwrap_or_default();
+            }
+            true
+        } else {
+            false
+        }
+    }
+
     pub fn save(&self) -> AppResult<()> {
         let config_path = &Config::get_save_path()?;
         if let Some(parent) = config_path.parent() {
@@ -143,8 +251,8 @@ impl Config {
     }
 
     pub fn read() -> AppResult<Self> {
-        let config: Config = super::file_handler::read_json(&Config::get_save_path()?)?;
-
+        let mut config: Config = super::file_handler::read_json(&Config::get_save_path()?)?;
+        config.migrate_if_needed();
         Ok(config)
     }
 }

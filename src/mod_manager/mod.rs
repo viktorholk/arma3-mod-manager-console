@@ -103,8 +103,23 @@ impl ModManager {
     pub fn refresh_mods(&mut self) -> AppResult<()> {
         let installed_mods = ModManager::get_installed_mods(&self.config)?;
         self.loaded_mods = Paginator::new(installed_mods, self.loaded_mods.page_size);
+        self.apply_active_preset();
 
         Ok(())
+    }
+
+    /// Sets `mod.enabled` for all loaded mods based on the active preset.
+    pub fn apply_active_preset(&mut self) {
+        let enabled = self.config.get_enabled_mods();
+        for m in self.loaded_mods.all_items_mut() {
+            m.enabled = enabled.contains(&m.identifier);
+        }
+    }
+
+    /// Switches to the given preset and applies it.
+    pub fn switch_preset(&mut self, name: &str) {
+        self.config.set_active_preset(name);
+        self.apply_active_preset();
     }
 
     fn get_installed_mods(config: &Config) -> AppResult<Vec<Mod>> {
