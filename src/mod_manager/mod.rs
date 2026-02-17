@@ -194,11 +194,20 @@ mod tests {
         // Set the HOME env var for this test
         env::set_var("HOME", &fake_home);
 
+        // Create and save a config so ModManager::new() can read it
+        let config = Config::new(
+            game_path.to_string_lossy().to_string(),
+            workshop_path.to_string_lossy().to_string(),
+            None,
+        )
+        .expect("Failed to create config");
+        config.save().expect("Failed to save config");
+
         // Initialize ModManager
         let manager = ModManager::new(10).expect("Failed to initialize ModManager");
 
-        // Verify Config was created
-        let config_path = fake_home.join("arma3-mod-manager-console-config.json");
+        // Verify Config was saved at the OS-specific path
+        let config_path = Config::get_save_path().expect("Failed to get config save path");
         assert!(config_path.exists(), "Config file was not created");
 
         // Verify "Test Mod" was loaded

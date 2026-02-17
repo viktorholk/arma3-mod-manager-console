@@ -256,3 +256,208 @@ impl Config {
         Ok(config)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Helper to create a Config for testing without touching the filesystem.
+    fn test_config() -> Config {
+        Config::new(String::new(), String::new(), None).unwrap()
+    }
+
+    // ── Preset CRUD ──
+
+    #[test]
+    fn new_config_has_default_preset() {
+        let config = test_config();
+        assert_eq!(config.get_active_preset_name(), "Default");
+        assert_eq!(config.get_preset_names(), vec!["Default"]);
+        assert_eq!(config.get_preset_mod_count("Default"), 0);
+    }
+
+    #[test]
+    fn save_preset_and_read_back() {
+        let mut config = test_config();
+        config.save_preset("Milsim".to_string(), vec!["mod_a".into(), "mod_b".into()]);
+
+        assert_eq!(config.get_preset_mod_count("Milsim"), 2);
+        assert!(config.get_preset_names().contains(&"Milsim".to_string()));
+    }
+
+    #[test]
+    fn set_active_preset_switches_enabled_mods() {
+        let mut config = test_config();
+        config.save_preset("A".to_string(), vec!["1".into(), "2".into()]);
+        config.save_preset("B".to_string(), vec!["3".into()]);
+
+        config.set_active_preset("B");
+        assert_eq!(config.get_active_preset_name(), "B");
+        assert_eq!(config.get_enabled_mods(), vec!["3".to_string()]);
+
+        config.set_active_preset("A");
+        assert_eq!(config.get_enabled_mods(), vec!["1".to_string(), "2".to_string()]);
+    }
+
+    #[test]
+    fn set_active_preset_ignores_nonexistent() {
+        let mut config = test_config();
+        config.set_active_preset("DoesNotExist");
+        assert_eq!(config.get_active_preset_name(), "Default");
+    }
+
+    #[test]
+    fn update_mods_writes_to_active_preset() {
+        let mut config = test_config();
+        config.update_mods(vec!["x".into(), "y".into()]);
+
+        assert_eq!(config.get_enabled_mods(), vec!["x".to_string(), "y".to_string()]);
+        assert_eq!(config.get_preset_mod_count("Default"), 2);
+    }
+
+    #[test]
+    fn rename_preset_updates_active() {
+        let mut config = test_config();
+        assert_eq!(config.get_active_preset_name(), "Default");
+
+        let ok = config.rename_preset("Default", "Main".to_string());
+        assert!(ok);
+        assert_eq!(config.get_active_preset_name(), "Main");
+        assert!(!config.get_preset_names().contains(&"Default".to_string()));
+        assert!(config.get_preset_names().contains(&"Main".to_string()));
+    }
+
+    #[test]
+    fn rename_non_active_preset_keeps_active() {
+        let mut config = test_config();
+        config.save_preset("Other".to_string(), vec![]);
+
+        let ok = config.rename_preset("Other", "Renamed".to_string());
+        assert!(ok);
+        assert_eq!(config.get_active_preset_name(), "Default");
+    }
+
+    #[test]
+    fn rename_nonexistent_returns_false() {
+        let mut config = test_config();
+        assert!(!config.rename_preset("Nope", "X".to_string()));
+    }
+
+    #[test]
+    fn delete_preset_guards_last() {
+        let mut config = test_config();
+        assert!(!config.delete_preset("Default"));
+        assert_eq!(config.get_preset_names().len(), 1);
+    }
+
+    #[test]
+    fn delete_preset_switches_active_if_needed() {
+        let mut config = test_config();
+        config.save_preset("Other".to_string(), vec!["z".into()]);
+        config.set_active_preset("Other");
+
+        assert!(config.delete_preset("Other"));
+        // Active should have switched to the remaining preset
+        assert_eq!(config.get_preset_names().len(), 1);
+        assert!(config.get_preset_names().contains(&"Default".to_string()));
+        assert_eq!(config.get_active_preset_name(), "Default");
+    }
+
+    #[test]
+    fn delete_non_active_preset_keeps_active() {
+        let mut config = test_config();
+        config.save_preset("Extra".to_string(), vec![]);
+
+        assert!(config.delete_preset("Extra"));
+        assert_eq!(config.get_active_preset_name(), "Default");
+        assert_eq!(config.get_preset_names(), vec!["Default"]);
+    }
+
+    #[test]
+    fn get_preset_names_sorted() {
+        let mut config = test_config();
+        config.save_preset("Zebra".to_string(), vec![]);
+        config.save_preset("Alpha".to_string(), vec![]);
+
+        let names = config.get_preset_names();
+        assert_eq!(names, vec!["Alpha", "Default", "Zebra"]);
+    }
+
+    // ── Serde roundtrip ──
+
+    #[test]
+    fn deserialize_old_config_no_presets_field() {
+        let json = r#"{
+            "game_path": "/game",
+            "workshop_path": "/workshop",
+            "custom_mods_path": null,
+            "executable_name": "arma3",
+            "enabled_mods": ["111", "222"],
+            "default_args": ""
+        }"#;
+
+        let mut config: Config = serde_json::from_str(json).unwrap();
+        config.migrate_if_needed();
+
+        assert_eq!(config.get_active_preset_name(), "Default");
+        assert_eq!(config.get_enabled_mods(), vec!["111".to_string(), "222".to_string()]);
+        assert_eq!(config.get_preset_mod_count("Default"), 2);
+    }
+
+    #[test]
+    fn deserialize_config_with_presets() {
+        let json = r#"{
+            "game_path": "/game",
+            "workshop_path": "/workshop",
+            "custom_mods_path": null,
+            "executable_name": "arma3",
+            "enabled_mods": ["a"],
+            "default_args": "",
+            "presets": {
+                "MyPreset": ["a", "b"],
+                "Empty": []
+            },
+            "active_preset": "MyPreset"
+        }"#;
+
+        let config: Config = serde_json::from_str(json).unwrap();
+
+        assert_eq!(config.get_active_preset_name(), "MyPreset");
+        assert_eq!(config.get_enabled_mods(), vec!["a".to_string(), "b".to_string()]);
+        assert_eq!(config.get_preset_mod_count("Empty"), 0);
+    }
+
+    #[test]
+    fn deserialize_numeric_mod_ids_compat() {
+        let json = r#"{
+            "game_path": "/game",
+            "workshop_path": "/workshop",
+            "custom_mods_path": null,
+            "executable_name": "arma3",
+            "enabled_mods": [123, 456, "mixed"],
+            "default_args": ""
+        }"#;
+
+        let mut config: Config = serde_json::from_str(json).unwrap();
+        config.migrate_if_needed();
+
+        assert_eq!(
+            config.get_enabled_mods(),
+            vec!["123".to_string(), "456".to_string(), "mixed".to_string()]
+        );
+    }
+
+    #[test]
+    fn serialize_then_deserialize_roundtrip() {
+        let mut config = test_config();
+        config.save_preset("Test".to_string(), vec!["m1".into()]);
+        config.set_active_preset("Test");
+
+        let json = serde_json::to_string(&config).unwrap();
+        let restored: Config = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(restored.get_active_preset_name(), "Test");
+        assert_eq!(restored.get_enabled_mods(), vec!["m1".to_string()]);
+        assert_eq!(restored.get_preset_names().len(), 2);
+    }
+}
