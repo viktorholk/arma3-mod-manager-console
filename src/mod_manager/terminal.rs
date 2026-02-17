@@ -358,12 +358,14 @@ impl<'a> Terminal<'a> {
         let page_number = self.mod_manager.loaded_mods.current_page + 1;
         let total_pages = self.mod_manager.loaded_mods.total_pages();
 
+        let preset_name = self.mod_manager.config.get_active_preset_name().to_string();
+
         execute!(
             stdout,
             cursor::MoveTo(0, top_offset),
             Print(&format!(
-                "Mods: {:<2}/{:<2}{:^25}Page: {:<2}/{:<2}",
-                enabled_mods, total_mods, " ", page_number, total_pages
+                "Mods: {:<2}/{:<2}    Preset: [{}]    Page: {:<2}/{:<2}",
+                enabled_mods, total_mods, preset_name, page_number, total_pages
             )),
         )?;
 
@@ -466,6 +468,8 @@ impl<'a> Terminal<'a> {
             ("Navigation", "<WASD>, <HJKL> or <ARROW KEYS>"),
             ("Toggle Selected Mod", "<SPACE>"),
             ("Toggle All Mods", "<CTRL> + <SPACE>"),
+            ("Cycle Presets", "<TAB> / <SHIFT+TAB>"),
+            ("Manage Presets", "T"),
             ("Check Dependencies", "C"),
             ("Refresh Mods", "R"),
             ("Set Custom Parameters", "F"),
@@ -552,6 +556,47 @@ impl<'a> Terminal<'a> {
                             selected_mod.enabled = !selected_mod.enabled;
                         }
 
+                        KeyCode::Tab => {
+                            // Save current selection to active preset
+                            let enabled_mods =
+                                self.mod_manager.loaded_mods.filter(|m| m.enabled);
+                            self.mod_manager.config.update_mods(
+                                enabled_mods.iter().map(|m| m.identifier.clone()).collect(),
+                            );
+                            // Cycle to next preset
+                            let names = self.mod_manager.config.get_preset_names();
+                            if let Some(idx) = names
+                                .iter()
+                                .position(|n| n == self.mod_manager.config.get_active_preset_name())
+                            {
+                                let next = (idx + 1) % names.len();
+                                self.mod_manager.switch_preset(&names[next]);
+                            }
+                            self.selected_index = 0;
+                            self.mod_manager.loaded_mods.current_page = 0;
+                        }
+                        KeyCode::BackTab => {
+                            // Save current selection to active preset
+                            let enabled_mods =
+                                self.mod_manager.loaded_mods.filter(|m| m.enabled);
+                            self.mod_manager.config.update_mods(
+                                enabled_mods.iter().map(|m| m.identifier.clone()).collect(),
+                            );
+                            // Cycle to previous preset
+                            let names = self.mod_manager.config.get_preset_names();
+                            if let Some(idx) = names
+                                .iter()
+                                .position(|n| n == self.mod_manager.config.get_active_preset_name())
+                            {
+                                let prev = if idx == 0 { names.len() - 1 } else { idx - 1 };
+                                self.mod_manager.switch_preset(&names[prev]);
+                            }
+                            self.selected_index = 0;
+                            self.mod_manager.loaded_mods.current_page = 0;
+                        }
+                        KeyCode::Char('t') => {
+                            self.preset_manager_screen(stdout)?;
+                        }
                         KeyCode::Char('r') => {
                             self.mod_manager.refresh_mods()?;
                         }
@@ -902,6 +947,174 @@ impl<'a> Terminal<'a> {
         // Restore terminal state
         execute!(stdout, cursor::Hide)?;
         execute!(stdout, SetCursorStyle::DefaultUserShape)?;
+
+        Ok(())
+    }
+
+    fn preset_manager_screen(&mut self, stdout: &mut Stdout) -> AppResult<()> {
+        let mut selected: usize = 0;
+
+        loop {
+            let names = self.mod_manager.config.get_preset_names();
+            let active_name = self.mod_manager.config.get_active_preset_name().to_string();
+
+            // Clamp selected index
+            if selected >= names.len() {
+                selected = names.len().saturating_sub(1);
+            }
+
+            self.clear_screen(stdout)?;
+
+            execute!(
+                stdout,
+                cursor::MoveTo(0, 0),
+                SetForegroundColor(Color::Cyan),
+                Print("Arma 3 Mod Manager Console - Preset Manager"),
+                SetForegroundColor(Color::Reset),
+            )?;
+
+            let mut y_offset: u16 = 2;
+
+            for (i, name) in names.iter().enumerate() {
+                let cursor = if i == selected { " > " } else { "   " };
+                let active_marker = if *name == active_name {
+                    "[*]"
+                } else {
+                    "[ ]"
+                };
+                let mod_count = self.mod_manager.config.get_preset_mod_count(name);
+
+                let color = if *name == active_name {
+                    Color::White
+                } else {
+                    Color::Grey
+                };
+
+                execute!(
+                    stdout,
+                    cursor::MoveTo(0, y_offset),
+                    SetForegroundColor(Color::Red),
+                    Print(cursor),
+                    SetForegroundColor(color),
+                    Print(format!("{} {:<20} ({:>2} mods)", active_marker, name, mod_count)),
+                    SetForegroundColor(Color::Reset),
+                )?;
+
+                y_offset += 1;
+            }
+
+            y_offset += 1;
+            execute!(
+                stdout,
+                cursor::MoveTo(0, y_offset),
+                Print("  <N> New  <ENTER> Load  <S> Save Current  <R> Rename  <D> Delete  <ESC> Back"),
+            )?;
+
+            stdout.flush()?;
+
+            if event::poll(Duration::from_millis(500))? {
+                if let Event::Key(KeyEvent { code, .. }) = event::read()? {
+                    match code {
+                        KeyCode::Up | KeyCode::Char('k') => {
+                            if selected > 0 {
+                                selected -= 1;
+                            }
+                        }
+                        KeyCode::Down | KeyCode::Char('j') => {
+                            if selected < names.len().saturating_sub(1) {
+                                selected += 1;
+                            }
+                        }
+                        KeyCode::Enter => {
+                            // Load selected preset and return to main screen
+                            let name = names[selected].clone();
+                            self.mod_manager.switch_preset(&name);
+                            self.selected_index = 0;
+                            self.mod_manager.loaded_mods.current_page = 0;
+                            break;
+                        }
+                        KeyCode::Char('n') => {
+                            // Create new preset from current mod selection
+                            let new_name = self.input_screen(
+                                stdout,
+                                "New Preset",
+                                "Preset name:",
+                                "",
+                            )?;
+                            if !new_name.is_empty() {
+                                let current_mods: Vec<String> = self
+                                    .mod_manager
+                                    .loaded_mods
+                                    .filter(|m| m.enabled)
+                                    .iter()
+                                    .map(|m| m.identifier.clone())
+                                    .collect();
+                                self.mod_manager
+                                    .config
+                                    .save_preset(new_name.clone(), current_mods);
+                                self.mod_manager.switch_preset(&new_name);
+                                self.mod_manager.config.save()?;
+                                // Update selected to point to the new preset
+                                let updated_names = self.mod_manager.config.get_preset_names();
+                                if let Some(idx) = updated_names.iter().position(|n| *n == new_name)
+                                {
+                                    selected = idx;
+                                }
+                            }
+                        }
+                        KeyCode::Char('s') => {
+                            // Overwrite selected preset with current mod selection
+                            let name = names[selected].clone();
+                            let current_mods: Vec<String> = self
+                                .mod_manager
+                                .loaded_mods
+                                .filter(|m| m.enabled)
+                                .iter()
+                                .map(|m| m.identifier.clone())
+                                .collect();
+                            self.mod_manager
+                                .config
+                                .save_preset(name.clone(), current_mods);
+                            // If this is the active preset, sync enabled_mods
+                            if name == self.mod_manager.config.get_active_preset_name() {
+                                let mods = self.mod_manager.config.get_enabled_mods();
+                                self.mod_manager.config.update_mods(mods);
+                            }
+                            self.mod_manager.config.save()?;
+                        }
+                        KeyCode::Char('r') => {
+                            // Rename selected preset
+                            let old_name = names[selected].clone();
+                            let new_name = self.input_screen(
+                                stdout,
+                                "Rename Preset",
+                                "New name:",
+                                &old_name,
+                            )?;
+                            if !new_name.is_empty() && new_name != old_name {
+                                self.mod_manager.config.rename_preset(&old_name, new_name.clone());
+                                self.mod_manager.config.save()?;
+                                // Update selected
+                                let updated_names = self.mod_manager.config.get_preset_names();
+                                if let Some(idx) =
+                                    updated_names.iter().position(|n| *n == new_name)
+                                {
+                                    selected = idx;
+                                }
+                            }
+                        }
+                        KeyCode::Char('d') => {
+                            // Delete selected preset (blocked if last)
+                            let name = names[selected].clone();
+                            self.mod_manager.config.delete_preset(&name);
+                            self.mod_manager.config.save()?;
+                        }
+                        KeyCode::Esc => break,
+                        _ => {}
+                    }
+                }
+            }
+        }
 
         Ok(())
     }
