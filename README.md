@@ -50,11 +50,20 @@ cd arma3-mod-manager-console
 cargo run
 ````
 
+## Presets
+
+Presets let you save named mod selections and switch between them without manually toggling mods each time. Useful for different game modes (milsim, antistasi, casual, etc.).
+
+- **Tab / Shift+Tab** — quickly cycle between presets from the main screen
+- **T** — open the Preset Manager to create, rename, delete, or overwrite presets
+
+Existing configs are automatically migrated — your current mod selection becomes the "Default" preset.
+
 ## Config
 The application creates a config file which looks like this:
 
 - Windows: `~/arma3-mod-launcher-console-config.json`
-- Linus & MacOS: `~/.config/arma3-mod-launcher-console/config.json`
+- Linux & macOS: `~/.config/arma3-mod-launcher-console/config.json`
 
 ````
 {
@@ -62,10 +71,12 @@ The application creates a config file which looks like this:
   "workshop_path": "/Users/user/Library/Application Support/Steam/steamapps/workshop/content/107410",
   "custom_mods_path": "/Users/user/arma3-mod-manager-console-custom-mods",
   "executable_name": "arma3",
-  "enabled_mods": [
-    
-  ],
-  "default_args": "-noSplash -skipIntro -world=empty"
+  "enabled_mods": [],
+  "default_args": "-noSplash -skipIntro -world=empty",
+  "presets": {
+    "Default": []
+  },
+  "active_preset": "Default"
 }
 ````
 
