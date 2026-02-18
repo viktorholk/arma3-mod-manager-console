@@ -82,9 +82,7 @@ cargo run --release
 
 ### Presets
 
-Presets let you save named mod selections and switch between them without manually toggling mods each time. Useful for different game modes (milsim, antistasi, casual, etc.).
-
-Existing configs are automatically migrated — your current mod selection becomes the "Default" preset.
+Presets let you save named mod selections and switch between them without manually toggling mods each time.
 
 ## Configuration
 
